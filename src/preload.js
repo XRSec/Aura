@@ -1,0 +1,31 @@
+const { contextBridge, ipcRenderer } = require('electron');
+
+contextBridge.exposeInMainWorld('api', {
+  saveSecret: (secret) => ipcRenderer.invoke('save-secret', secret),
+  getConfig: (mode) => ipcRenderer.invoke('get-config', mode),
+  getCfHostnames: (customPath) => ipcRenderer.invoke('get-cf-hostnames', customPath),
+  getListenAddresses: () => ipcRenderer.invoke('get-listen-addresses'),
+  discoverCfConfigs: () => ipcRenderer.invoke('discover-cf-configs'),
+  getServiceState: () => ipcRenderer.invoke('get-service-state'),
+  toggleServiceState: (connect) => ipcRenderer.invoke('toggle-service-state', connect),
+  saveConfig: (cfg) => ipcRenderer.invoke('save-config', cfg),
+  saveProviderConfig: (mode, cfg) => ipcRenderer.invoke('save-provider-config', mode, cfg),
+  getTokens: () => ipcRenderer.invoke('get-tokens'),
+  getRecentLogs: () => ipcRenderer.invoke('get-recent-logs'),
+  revokeToken: (token) => ipcRenderer.invoke('revoke-token', token),
+  restartTunnel: (mode) => ipcRenderer.invoke('restart-tunnel', mode),
+  openExternal: (url) => ipcRenderer.invoke('open-external', url),
+  pickCfConfig: () => ipcRenderer.invoke('pick-cf-config'),
+  inspectCfConfig: (path) => ipcRenderer.invoke('inspect-cf-config', path),
+  pickBinaryFile: () => ipcRenderer.invoke('pick-binary-file'),
+  discoverTunnelBinaries: () => ipcRenderer.invoke('discover-tunnel-binaries'),
+  discoverAcmeCerts: () => ipcRenderer.invoke('discover-acme-certs'),
+  pickCertFile: () => ipcRenderer.invoke('pick-cert-file'),
+  pickKeyFile: () => ipcRenderer.invoke('pick-key-file'),
+  validateSslFiles: (certPath, keyPath) => ipcRenderer.invoke('validate-ssl-files', certPath, keyPath),
+  onUrlUpdated: (callback) => ipcRenderer.on('url-updated', (_event, url) => callback(url)),
+  onServiceStateChanged: (callback) => ipcRenderer.on('service-state-changed', (_event, isConnected) => callback(isConnected)),
+  onMcpLog: (callback) => ipcRenderer.on('mcp-log', (_event, logEntry) => callback(logEntry)),
+  onHttpLog: (callback) => ipcRenderer.on('http-log', (_event, logEntry) => callback(logEntry)),
+  onRuntimeLog: (callback) => ipcRenderer.on('runtime-log', (_event, logEntry) => callback(logEntry))
+});

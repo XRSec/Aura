@@ -1,0 +1,1418 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Aura - MCP Connector</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --gray-0: #ffffff;
+      --gray-100: #ededed;
+      --gray-300: #afafaf;
+      --gray-500: #5d5d5d;
+      --gray-600: #414141;
+      --gray-700: #303030;
+      --gray-750: #282828;
+      --gray-800: #212121;
+      --gray-900: #181818;
+      --gray-1000: #0d0d0d;
+      --blue-300: #339cff;
+      --green-300: #40c977;
+      --orange-300: #ff8549;
+      --red-300: #ff6764;
+      --color-background-surface: var(--gray-900);
+      --color-background-elevated: var(--gray-750);
+      --color-background-control: rgb(255 255 255 / 3%);
+      --color-background-control-hover: rgb(255 255 255 / 7%);
+      --color-background-control-active: rgb(255 255 255 / 10%);
+      --color-background-button-secondary: rgb(255 255 255 / 6%);
+      --color-background-button-secondary-hover: rgb(255 255 255 / 10%);
+      --color-text-primary: var(--gray-0);
+      --color-text-secondary: rgb(255 255 255 / 70%);
+      --color-text-tertiary: rgb(255 255 255 / 50%);
+      --color-text-disabled: rgb(255 255 255 / 32%);
+      --color-text-success: var(--green-300);
+      --color-text-warning: var(--orange-300);
+      --color-text-error: var(--red-300);
+      --color-border: rgb(255 255 255 / 8%);
+      --color-border-heavy: rgb(255 255 255 / 16%);
+      --color-border-focus: rgb(51 156 255 / 70%);
+      --font-ui: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
+      --font-mono: ui-monospace, "SF Mono", Menlo, Monaco, Consolas, monospace;
+      --radius-sm: 6px;
+      --radius-md: 10px;
+      --radius-lg: 14px;
+      --radius-round: 999px;
+    }
+
+    * { box-sizing: border-box; }
+    html, body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      padding: 0;
+      background: var(--gray-900);
+      
+      color: var(--color-text-primary);
+      font-family: var(--font-ui);
+      font-size: 13px;
+      -webkit-font-smoothing: antialiased;
+      user-select: none;
+      overflow-x: hidden;
+      overflow-y: auto;
+    }
+
+    /* Custom Titlebar */
+    .app-titlebar {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      display: flex;
+      height: 48px;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 16px 0 80px; /* Space for macOS traffic lights */
+      background: #181818c7;
+      border-bottom: 1px solid var(--color-border);
+      -webkit-app-region: drag;
+    }
+    .titlebar-brand {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--color-text-primary);
+    }
+    .status-badge {
+      display: inline-flex;
+      height: 24px;
+      align-items: center;
+      gap: 6px;
+      padding: 0 10px;
+      border: 1px solid rgb(64 201 119 / 26%);
+      border-radius: var(--radius-round);
+      background: #40c9771a;
+      color: var(--green-300);
+      font-size: 11px;
+      font-weight: 600;
+      transition: all 0.2s ease;
+    }
+    .status-badge.is-stopped {
+      border-color: rgb(255 103 100 / 26%);
+      background: #ff676417;
+      color: var(--red-300);
+    }
+    .status-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: currentColor;
+      box-shadow: 0 0 8px currentColor;
+      animation: pulse-dot 2s infinite ease-in-out;
+    }
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.5; transform: scale(0.85); }
+    }
+    .status-badge.is-stopped .status-dot {
+      animation: none;
+      box-shadow: none;
+    }
+
+    /* Main Container */
+    .container {
+      width: 100%;
+      height: calc(100dvh - 48px);
+      max-width: none;
+      margin: 0;
+      padding: 0;
+      overflow: visible;
+    }
+
+    #surface-settings {
+      width: min(640px, calc(100% - 48px));
+      margin: 0 auto;
+      padding: 26px 0 40px;
+    }
+
+    .logs-container {
+      width: 95%;
+      max-width: none;
+      min-width: 0;
+      height: 100%;
+      margin: 0 auto;
+      padding: 8px 0 8px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .surface-header {
+      margin-bottom: 8px;
+      flex-shrink: 0;
+    }
+    .surface-header h1 {
+      margin: 0 0 8px;
+      font-size: 20px;
+      font-weight: 500;
+      letter-spacing: -0.015em;
+    }
+    .surface-header p {
+      max-width: 520px;
+      margin: 0;
+      color: var(--color-text-secondary);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+    .section-heading {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin: 0 0 8px;
+      padding: 0 2px;
+      color: var(--color-text-tertiary);
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      line-height: 1.2;
+      text-transform: uppercase;
+    }
+    .section-heading::after {
+      content: '';
+      height: 1px;
+      flex: 1;
+      background: var(--color-border);
+    }
+
+    /* Settings Card */
+    .settings-card {
+      background: var(--color-background-control);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-lg);
+      padding: 0 16px;
+      margin-bottom: 22px;
+      overflow: visible;
+    }
+
+    .setting-row {
+      display: grid;
+      grid-template-columns: 140px minmax(0, 1fr);
+      align-items: center;
+      gap: 16px;
+      min-height: 52px;
+      padding: 10px 0;
+      border-bottom: 1px solid var(--color-border);
+    }
+    .setting-row:last-child {
+      border-bottom: none;
+    }
+    .setting-label {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--color-text-secondary);
+    }
+
+    .setting-row.is-dense {
+      min-height: 0;
+      padding-top: 7px;
+      padding-bottom: 7px;
+    }
+    .setting-row.is-hint-row {
+      min-height: 0;
+      padding-top: 5px;
+      padding-bottom: 7px;
+    }
+    .setting-row.is-action-row {
+      min-height: 0;
+      padding: 10px 0;
+      border-bottom: 0;
+      justify-content: end;
+    }
+    .setting-row.is-action-row > button {
+      justify-self: end;
+    }
+
+    .setting-label.is-hint-label {
+      color: var(--color-text-tertiary);
+      font-size: 10px;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+    }
+
+    select {
+      width: 100%;
+      height: 32px;
+      padding: 0 28px 0 10px;
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-sm);
+      background: var(--color-background-control) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='%23afafaf'%3E%3Cpath d='M7 10l5 5 5-5z'/%3E%3C/svg%3E") no-repeat right 8px center;
+      color: var(--color-text-primary);
+      font-family: var(--font-ui);
+      font-size: 12px;
+      outline: none;
+      -webkit-appearance: none;
+      appearance: none;
+      cursor: pointer;
+      transition: border-color 0.15s ease, background 0.15s ease;
+      -webkit-app-region: no-drag;
+    }
+    input[type="text"], input[type="password"], input[type="number"] {
+      width: 100%;
+      height: 32px;
+      padding: 0 10px;
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-sm);
+      background: var(--color-background-control);
+      color: var(--color-text-primary);
+      font-family: var(--font-mono);
+      font-size: 12px;
+      outline: none;
+      transition: border-color 0.15s ease, background 0.15s ease;
+      -webkit-app-region: no-drag;
+    }
+    input:focus, select:focus {
+      border-color: var(--color-border-focus);
+      background: var(--color-background-control-active);
+      box-shadow: 0 0 0 3px rgb(51 156 255 / 10%);
+    }
+    :where(button, a, input, select, textarea):focus-visible {
+      outline: 2px solid var(--blue-300);
+      outline-offset: 2px;
+    }
+    .is-focused {
+      outline: none;
+      border-color: var(--color-border-focus) !important;
+      background: var(--color-background-control-active) !important;
+      box-shadow: 0 0 0 3px rgb(51 156 255 / 10%) !important;
+    }
+    input::placeholder {
+      color: var(--color-text-disabled);
+    }
+    input:read-only {
+      background: transparent;
+      color: var(--color-text-tertiary);
+    }
+    #tunnel-mode-display,
+    #listen-host,
+    #shell-policy-display {
+      background: var(--color-background-control);
+      color: var(--color-text-primary);
+    }
+
+    .input-combobox {
+      position: relative;
+      display: flex;
+      align-items: center;
+      width: 100%;
+    }
+    .input-combobox.compact-combobox {
+      width: min(100%, 430px);
+    }
+    .input-combobox input {
+      width: 100%;
+      padding-right: 28px;
+    }
+    .combobox-arrow-btn {
+      position: absolute;
+      right: 4px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 24px;
+      height: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: 0;
+      background: transparent;
+      color: var(--color-text-tertiary);
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      z-index: 2;
+      padding: 0;
+    }
+    .combobox-arrow-btn:hover {
+      background: var(--color-background-control-hover);
+      color: var(--color-text-primary);
+    }
+    .combobox-arrow-btn svg {
+      width: 14px;
+      height: 14px;
+      fill: currentColor;
+    }
+    .combobox-dropdown {
+      position: absolute;
+      top: calc(100% + 4px);
+      right: auto;
+      left: 0;
+      width: max-content;
+      min-width: 100%;
+      max-width: min(480px, calc(100vw - 32px));
+      background: var(--color-background-elevated);
+      border: 1px solid var(--color-border-heavy);
+      border-radius: var(--radius-md);
+      box-shadow: 0 14px 36px rgba(0,0,0,0.6);
+      z-index: 1000;
+      max-height: 220px;
+      overflow-y: auto;
+      display: none;
+      padding: 4px;
+    }
+    .combobox-option {
+      padding: 8px 10px;
+      border-radius: var(--radius-sm);
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--color-text-secondary);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: flex-start;
+      gap: 12px;
+      text-align: left;
+      white-space: nowrap;
+    }
+    .combobox-option:hover {
+      background: var(--color-background-control-hover);
+      color: var(--color-text-primary);
+    }
+    .combobox-option.is-active {
+      background: var(--color-background-control-active);
+      color: var(--color-text-primary);
+      outline: 1px solid var(--color-border-focus);
+      outline-offset: -1px;
+    }
+
+    .field-with-action {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 8px;
+      align-items: center;
+    }
+
+    /* Buttons */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      height: 32px;
+      padding: 0 14px;
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-sm);
+      font-family: var(--font-ui);
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      background: var(--color-background-button-secondary);
+      color: var(--color-text-secondary);
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+      -webkit-app-region: no-drag;
+      position: relative;
+      overflow: hidden;
+    }
+    .btn:hover {
+      background: var(--color-background-button-secondary-hover);
+      color: var(--color-text-primary);
+      border-color: var(--color-border-heavy);
+      transform: translateY(-1px);
+    }
+    .btn:active {
+      transform: translateY(0);
+      background: var(--color-background-control-active);
+    }
+    .btn.is-loading {
+      color: transparent !important;
+      pointer-events: none;
+      border-color: var(--blue-300);
+      background: rgba(51, 156, 255, 0.22);
+    }
+    .btn.is-loading::after {
+      content: '';
+      width: 12px;
+      height: 12px;
+      border: 2px solid rgba(255, 255, 255, 0.32);
+      border-top-color: var(--blue-300);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      position: absolute;
+      transform: translateX(-50%);
+      left: 50%;
+      top: 50%;
+      margin-top: -6px;
+    }
+    @keyframes spin {
+      from { transform: translateX(-50%) rotate(0deg); }
+      to { transform: translateX(-50%) rotate(360deg); }
+    }
+    .btn-primary {
+      background: rgba(51, 156, 255, 0.15);
+      color: var(--blue-300);
+      border-color: rgba(51, 156, 255, 0.35);
+    }
+    .btn-primary:hover {
+      background: rgba(51, 156, 255, 0.25);
+      border-color: var(--blue-300);
+      color: #fff;
+    }
+    .btn-success {
+      background: rgba(64, 201, 119, 0.15) !important;
+      color: var(--green-300) !important;
+      border-color: rgba(64, 201, 119, 0.4) !important;
+    }
+    .btn-danger {
+      background: #fa423e1c;
+      color: var(--red-300);
+      border: 1px solid #fa423e38;
+      height: 24px;
+      padding: 0 10px;
+      font-size: 11px;
+    }
+    .btn-danger:hover {
+      background: #fa423e33;
+      color: #fff;
+      border-color: var(--red-300);
+    }
+
+    /* Token List */
+    .token-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 10px;
+      margin-bottom: 6px;
+      background: var(--color-background-control);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-sm);
+      font-family: var(--font-mono);
+      font-size: 11px;
+      transition: border-color 0.15s ease, background 0.15s ease;
+    }
+    .token-item:hover {
+      border-color: var(--color-border-heavy);
+      background: var(--color-background-control-hover);
+    }
+    .token-item:last-child {
+      margin-bottom: 0;
+    }
+    .token-empty-state {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      padding: 9px 10px;
+      border: 1px dashed var(--color-border-heavy);
+      border-radius: var(--radius-sm);
+      background: var(--color-background-control);
+      color: var(--color-text-tertiary);
+      font-size: 11px;
+      line-height: 1.4;
+    }
+    .token-empty-state strong {
+      color: var(--color-text-secondary);
+      font-family: var(--font-ui);
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .token-empty-state span {
+      font-family: var(--font-ui);
+    }
+    .token-meta {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin-top: 2px;
+    }
+    .token-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 1px 7px;
+      border-radius: var(--radius-round);
+      font-family: var(--font-ui);
+      font-size: 9px;
+      font-weight: 600;
+      line-height: 1.5;
+      border: 1px solid transparent;
+    }
+    .token-badge.is-valid {
+      color: var(--green-300);
+      border-color: rgba(64, 201, 119, 0.35);
+      background: rgba(64, 201, 119, 0.13);
+    }
+    .token-badge.is-duration {
+      color: var(--color-text-tertiary);
+      border-color: var(--color-border);
+      background: rgb(255 255 255 / 4%);
+    }
+
+    @media (max-width: 520px) {
+      .token-item {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 8px;
+      }
+      .token-item > div:first-child {
+        width: 100%;
+        padding-right: 0 !important;
+        overflow-wrap: anywhere;
+      }
+      .token-item .btn-danger {
+        width: 100%;
+      }
+    }
+
+    /* Terminal Activity Log */
+    .activity-log {
+      width: 100%;
+      height: 110px;
+      padding: 8px 10px;
+      background: var(--gray-1000);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-sm);
+      color: var(--color-text-secondary);
+      font-family: var(--font-mono);
+      font-size: 11px;
+      line-height: 1.45;
+      resize: none;
+      outline: none;
+      box-sizing: border-box;
+      caret-color: var(--blue-300);
+      tab-size: 2;
+    }
+    .activity-log:focus {
+      border-color: var(--color-border-focus);
+      box-shadow: 0 0 0 3px rgb(51 156 255 / 10%);
+    }
+
+    .guide-box {
+      margin-top: 10px;
+      padding: 12px 14px;
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.04) 0%, rgba(255, 255, 255, 0.01) 100%);
+      border: 1px solid var(--color-border-heavy);
+      border-radius: var(--radius-md);
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
+      font-size: 11px;
+      line-height: 1.6;
+    }
+    .guide-box-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 8px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid var(--color-border);
+    }
+    .guide-box strong {
+      color: var(--color-text-primary);
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .guide-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 6px;
+    }
+    .guide-row span:first-child {
+      color: var(--color-text-tertiary);
+    }
+    .copyable-badge {
+      min-width: 0;
+      max-width: 100%;
+      overflow-wrap: anywhere;
+      cursor: pointer;
+      user-select: none;
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 3px 8px;
+      border-radius: 4px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+    }
+    .copyable-badge:hover {
+      background: rgba(51, 156, 255, 0.15);
+      border-color: rgba(51, 156, 255, 0.35);
+      color: var(--blue-300);
+      transform: translateY(-1px);
+    }
+    .copyable-badge:active {
+      transform: translateY(0);
+    }
+    .copyable-badge.copying {
+      color: var(--green-300);
+      border-color: rgba(64, 201, 119, 0.5);
+      background: rgba(64, 201, 119, 0.16);
+    }
+    /* Titlebar Navigation Tabs */
+    .titlebar-nav {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 3px;
+      border-radius: var(--radius-md);
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--color-border);
+      -webkit-app-region: no-drag !important;
+      pointer-events: auto;
+    }
+    .titlebar-tab-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      height: 24px;
+      padding: 0 10px;
+      border-radius: var(--radius-sm);
+      border: 0;
+      background: transparent;
+      color: var(--color-text-secondary);
+      font-family: var(--font-ui);
+      font-size: 11px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      -webkit-app-region: no-drag !important;
+      pointer-events: auto;
+    }
+    .titlebar-tab-btn * {
+      pointer-events: none;
+      -webkit-app-region: no-drag !important;
+    }
+    .titlebar-tab-btn:hover {
+      color: var(--color-text-primary);
+      background: var(--color-background-control-hover);
+    }
+    .titlebar-tab-btn.is-active {
+      color: var(--color-text-primary);
+      background: rgba(255, 255, 255, 0.12);
+      font-weight: 600;
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+    }
+    .titlebar-tab-btn svg {
+      width: 13px;
+      height: 13px;
+      fill: currentColor;
+    }
+
+    /* Tab Page Surfaces */
+    .tab-surface {
+      display: none;
+    }
+    .tab-surface.is-active {
+      display: flex;
+      flex-direction: column;
+      animation: fadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    #surface-logs {
+      height: 100%;
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    #runtime-log-view {
+      width: 100%;
+      flex: 1 1 auto;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Activity & Log Styles */
+    #http-log-view {
+      min-height: 0;
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-md);
+      background: var(--color-background-control);
+      overflow-x: hidden;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+    }
+    .http-method-badge {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      font-weight: 700;
+      padding: 1px 5px;
+      border-radius: 4px;
+      text-transform: uppercase;
+    }
+    .http-method-GET { background: rgba(51, 156, 255, 0.15); color: var(--blue-300); }
+    .http-method-POST { background: rgba(64, 201, 119, 0.15); color: var(--green-300); }
+    .http-method-OPTIONS { background: rgba(168, 85, 247, 0.15); color: #c084fc; }
+    .http-method-DELETE { background: rgba(239, 68, 68, 0.15); color: var(--red-300); }
+    .http-method-PUT { background: rgba(245, 158, 11, 0.15); color: #fbbf24; }
+
+    .http-status-badge {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      font-weight: 600;
+      padding: 1px 5px;
+      border-radius: 4px;
+    }
+    .http-status-2xx { background: rgba(64, 201, 119, 0.15); color: var(--green-300); }
+    .http-status-3xx { background: rgba(51, 156, 255, 0.15); color: var(--blue-300); }
+    .http-status-4xx { background: rgba(245, 158, 11, 0.18); color: #fbbf24; }
+    .http-status-5xx { background: rgba(239, 68, 68, 0.2); color: var(--red-300); }
+
+    .activity-summary-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+      margin-bottom: 18px;
+    }
+    .activity-summary-card {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      padding: 12px 14px;
+      background: var(--color-background-control);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-md);
+      transition: border-color 0.15s ease;
+    }
+    .activity-summary-card.is-warning {
+      border-color: rgba(255, 133, 73, 0.3);
+      background: rgba(255, 133, 73, 0.05);
+    }
+    .activity-summary-card.is-error {
+      border-color: rgba(255, 103, 100, 0.3);
+      background: rgba(255, 103, 100, 0.05);
+    }
+    .activity-summary-card strong {
+      font-size: 20px;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+    }
+    .activity-summary-card small {
+      color: var(--color-text-tertiary);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .log-search {
+      flex: 1;
+      min-width: 180px;
+      height: 26px;
+      padding: 0 10px;
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-sm);
+      background: var(--color-background-control);
+      color: var(--color-text-primary);
+      font-size: 11px;
+      outline: none;
+    }
+    .log-search:focus {
+      border-color: var(--color-border-focus);
+    }
+
+    .log-toolbar {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 8px;
+      flex-wrap: wrap;
+    }
+    .segmented-control {
+      display: inline-flex;
+      padding: 2px;
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-sm);
+      background: var(--color-background-control);
+    }
+    .segmented-btn {
+      height: 24px;
+      padding: 0 10px;
+      border: 0;
+      border-radius: calc(var(--radius-sm) - 2px);
+      background: transparent;
+      color: var(--color-text-tertiary);
+      font-family: var(--font-ui);
+      font-size: 11px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .segmented-btn:hover {
+      color: var(--color-text-primary);
+    }
+    .segmented-btn.is-active {
+      background: var(--color-background-control-active);
+      color: var(--color-text-primary);
+      font-weight: 600;
+    }
+
+    #mcp-log-view {
+      height: auto;
+      min-height: 220px;
+      display: grid;
+      grid-template-rows: auto auto minmax(0, 1fr);
+      overflow: hidden;
+    }
+
+    .activity-table {
+      min-height: 0;
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-md);
+      background: var(--color-background-control);
+      overflow-x: hidden;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+    }
+    .activity-item {
+      border-bottom: 1px solid var(--color-border);
+      transition: background 0.15s ease;
+    }
+    .activity-item:last-child {
+      border-bottom: none;
+    }
+    .activity-item summary {
+      display: grid;
+      grid-template-columns: 8px minmax(0, 1fr) auto 16px;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 14px;
+      cursor: pointer;
+      list-style: none;
+    }
+    .activity-item summary::-webkit-details-marker {
+      display: none;
+    }
+    .activity-item summary:hover {
+      background: var(--color-background-control-hover);
+    }
+    .activity-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+    }
+    .activity-dot.is-success { background: var(--green-300); box-shadow: 0 0 6px rgba(64, 201, 119, 0.4); }
+    .activity-dot.is-error { background: var(--red-300); box-shadow: 0 0 6px rgba(255, 103, 100, 0.4); }
+    .activity-dot.is-info { background: var(--blue-300); }
+    .activity-dot.is-warn { background: var(--orange-300); }
+
+    .activity-meta {
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .activity-header-line {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .tool-badge {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--blue-300);
+      background: rgba(51, 156, 255, 0.12);
+      padding: 1px 6px;
+      border-radius: 4px;
+    }
+    .activity-summary-text {
+      color: var(--color-text-secondary);
+      font-size: 12px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .activity-time {
+      color: var(--color-text-tertiary);
+      font-size: 11px;
+      font-variant-numeric: tabular-nums;
+    }
+    .activity-chevron {
+      color: var(--color-text-tertiary);
+      font-size: 10px;
+      transition: transform 0.15s ease;
+      display: flex;
+      justify-content: center;
+    }
+    .activity-item[open] .activity-chevron {
+      transform: rotate(90deg);
+    }
+    .activity-details-panel {
+      padding: 12px 14px;
+      background: #0d0d0f;
+      border-top: 1px solid var(--color-border);
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .activity-code-block {
+      background: #141416;
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-sm);
+      padding: 8px 10px;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      line-height: 1.45;
+      color: var(--gray-100);
+      white-space: pre-wrap;
+      word-break: break-all;
+      max-height: 240px;
+      overflow-y: auto;
+      user-select: text !important;
+      -webkit-user-select: text !important;
+      cursor: text;
+    }
+    .activity-empty {
+      padding: 32px 16px;
+      text-align: center;
+      color: var(--color-text-tertiary);
+      font-size: 12px;
+    }
+
+    .runtime-section-heading {
+      flex: 0 0 auto;
+      margin-bottom: 6px;
+    }
+
+    .runtime-log-stream {
+      width: 100%;
+      flex: 1 1 auto;
+      height: auto;
+      min-height: 0;
+      max-height: none;
+      padding: 10px 12px;
+      background: var(--gray-1000);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-md);
+      color: var(--color-text-secondary);
+      font-family: var(--font-mono);
+      font-size: 11px;
+      line-height: 1.5;
+      overflow-y: auto;
+      box-sizing: border-box;
+      white-space: pre-wrap;
+      word-break: break-all;
+      user-select: text !important;
+      -webkit-user-select: text !important;
+      cursor: text;
+    }
+    .runtime-log-stream * {
+      user-select: text !important;
+      -webkit-user-select: text !important;
+    }
+    .log-line {
+      margin-bottom: 4px;
+    }
+    .runtime-detail-toggle {
+      margin-left: 8px;
+      height: 18px;
+      padding: 0 6px;
+      border: 1px solid var(--color-border);
+      border-radius: 4px;
+      background: transparent;
+      color: var(--color-text-tertiary);
+      font-size: 10px;
+      cursor: pointer;
+    }
+    .runtime-detail-toggle:hover {
+      color: var(--color-text-primary);
+      background: var(--color-background-control-hover);
+    }
+    .runtime-detail-panel {
+      margin: 6px 0 6px 18px;
+      padding: 8px;
+      max-height: 240px;
+      overflow: auto;
+      border: 1px solid var(--color-border);
+      border-radius: 6px;
+      background: #0b0b0c;
+      color: var(--color-text-tertiary);
+      font-size: 10px;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .log-line.is-error { color: var(--red-300); }
+    .log-line.is-warn { color: var(--orange-300); }
+    .log-line.is-debug { color: var(--color-text-tertiary); }
+    .log-tag {
+      display: inline-block;
+      padding: 0 4px;
+      border-radius: 3px;
+      font-size: 10px;
+      margin-right: 6px;
+      font-weight: 600;
+    }
+    .log-tag.tag-system { background: rgba(255, 255, 255, 0.1); color: var(--gray-100); }
+    .log-tag.tag-tunnel { background: rgba(51, 156, 255, 0.18); color: var(--blue-300); }
+    .log-tag.tag-auth { background: rgba(64, 201, 119, 0.18); color: var(--green-300); }
+    .log-tag.tag-mcp { background: rgba(168, 85, 247, 0.18); color: #c084fc; }
+    .log-tag.tag-http { background: rgba(245, 158, 11, 0.18); color: #fbbf24; }
+    .field-hint {
+      margin-top: 6px;
+      font-size: 10px;
+      line-height: 1.35;
+      color: var(--color-text-tertiary);
+      min-height: 14px;
+    }
+    .field-hint.is-error {
+      color: var(--color-text-error);
+    }
+    .field-hint.is-fading {
+      opacity: 0;
+      transition: opacity 0.3s ease;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        scroll-behavior: auto !important;
+        transition-duration: 0.01ms !important;
+      }
+    }
+
+    .btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      filter: grayscale(0.1);
+    }
+    .btn.btn-primary {
+      font-weight: 600;
+    }
+  </style>
+</head>
+<body>
+  <!-- Drag Bar / Header -->
+  <div class="app-titlebar">
+    <div class="titlebar-brand">
+      <strong>Aura</strong>
+      <span style="color: var(--color-text-tertiary); font-size: 11px;">MCP Server</span>
+    </div>
+    <div style="display: flex; align-items: center; gap: 12px; -webkit-app-region: no-drag;">
+      <!-- Navigation Tabs: Settings & Logs -->
+      <div class="titlebar-nav" role="tablist">
+        <button type="button" class="titlebar-tab-btn is-active" id="tab-btn-settings" role="tab" aria-selected="true" aria-controls="surface-settings" onclick="switchMainTab('settings')">
+          <svg viewBox="0 0 24 24"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>
+          Settings
+        </button>
+        <button type="button" class="titlebar-tab-btn" id="tab-btn-logs" role="tab" aria-selected="false" aria-controls="surface-logs" onclick="switchMainTab('logs')">
+          <svg viewBox="0 0 24 24"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"/></svg>
+          Logs
+        </button>
+      </div>
+
+      <div class="status-badge is-stopped" id="status-indicator">
+        <span class="status-dot"></span>
+        <span id="status-text">Stopped</span>
+      </div>
+      <button class="btn btn-secondary" id="power-btn" style="height: 26px; font-size: 11px; padding: 0 10px; color: var(--green-300); border: 1px solid rgb(64 201 119 / 26%);">Connect</button>
+    </div>
+  </div>
+
+  <div class="container">
+    <!-- SURFACE 1: Settings Page -->
+    <div class="tab-surface is-active" id="surface-settings">
+      <div class="surface-header">
+        <h1>Connector Configuration</h1>
+        <p>Configure local tools, network tunnels, and authorization credentials for AI assistants.</p>
+      </div>
+
+      <!-- Section 1: Ingress & Network -->
+      <div class="section-heading">Network & Tunnel</div>
+      <div class="settings-card">
+        <div class="setting-row">
+          <div class="setting-label">Auto Connect</div>
+          <div style="display: flex; align-items: center; justify-content: space-between;">
+            <span style="color: var(--color-text-secondary); font-size: 12px;">Automatically start server & tunnel on app launch</span>
+            <input type="checkbox" id="auto-connect-toggle" style="width: 16px; height: 16px; cursor: pointer; accent-color: var(--blue-300);">
+          </div>
+        </div>
+
+        <div class="setting-row">
+          <div class="setting-label">Debug Mode</div>
+          <div style="display: flex; align-items: center; justify-content: space-between;">
+            <span style="color: var(--color-text-secondary); font-size: 12px;">Enable verbose logging and diagnostic protocol output</span>
+            <input type="checkbox" id="debug-mode-toggle" style="width: 16px; height: 16px; cursor: pointer; accent-color: var(--blue-300);">
+          </div>
+        </div>
+
+        <div class="setting-row">
+          <div class="setting-label">Tunnel Mode</div>
+          <div class="input-combobox compact-combobox" id="tunnel-mode-combobox-wrapper">
+            <input type="text" id="tunnel-mode-display" value="Cloudflare Named Tunnel" readonly spellcheck="false" style="cursor: pointer;" role="combobox" aria-haspopup="listbox" aria-controls="tunnel-mode-dropdown-menu" aria-expanded="false" aria-label="Tunnel mode">
+            <button type="button" class="combobox-arrow-btn" id="tunnel-mode-arrow" title="Select Tunnel Mode" aria-label="Select tunnel mode" aria-controls="tunnel-mode-dropdown-menu" aria-expanded="false">
+              <svg viewBox="0 0 24 24"><path d="M7 10l5 5 5-5z"/></svg>
+            </button>
+            <div class="combobox-dropdown" id="tunnel-mode-dropdown-menu" role="listbox" aria-label="Tunnel modes">
+              <div class="combobox-option" role="option" tabindex="-1" data-value="cloudflare-named"><span>Cloudflare Named Tunnel</span><span style="color: var(--color-text-tertiary); font-size: 10px;">Recommended</span></div>
+              <div class="combobox-option" role="option" tabindex="-1" data-value="cloudflare-quick"><span>Cloudflare Quick Tunnel</span><span style="color: var(--color-text-tertiary); font-size: 10px;">Random URL</span></div>
+              <div class="combobox-option" role="option" tabindex="-1" data-value="openai"><span>OpenAI Secure MCP Tunnel</span><span style="color: var(--color-text-tertiary); font-size: 10px;">Private Ingress</span></div>
+              <div class="combobox-option" role="option" tabindex="-1" data-value="custom"><span>Custom / Bring Your Own Tunnel</span><span style="color: var(--color-text-tertiary); font-size: 10px;">BYO Proxy</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="setting-row">
+          <div class="setting-label">MCP Listen Address</div>
+          <div class="input-combobox compact-combobox" id="listen-address-combobox-wrapper">
+            <input type="text" id="listen-host" value="127.0.0.1 · Loopback only" readonly spellcheck="false" style="cursor: pointer;" role="combobox" aria-haspopup="listbox" aria-controls="listen-address-dropdown-menu" aria-expanded="false" aria-label="MCP listen address">
+            <button type="button" class="combobox-arrow-btn" id="listen-address-arrow" title="Select MCP listen address" aria-label="Select MCP listen address" aria-controls="listen-address-dropdown-menu" aria-expanded="false">
+              <svg viewBox="0 0 24 24"><path d="M7 10l5 5 5-5z"/></svg>
+            </button>
+            <div class="combobox-dropdown" id="listen-address-dropdown-menu" role="listbox" aria-label="MCP listen addresses"></div>
+          </div>
+        </div>
+
+        <div class="setting-row">
+          <div class="setting-label">MCP Listen Port</div>
+          <input type="number" id="listen-port" min="1" max="65535" step="1" inputmode="numeric" aria-label="MCP listen port">
+        </div>
+
+        <div class="setting-row is-dense" id="openai-binary-row" style="display: none;">
+          <div class="setting-label">Tunnel Binary</div>
+          <div class="field-with-action">
+            <div class="input-combobox" id="openai-binary-combobox-wrapper">
+              <input type="text" id="openai-binary-path" placeholder="Auto-detected /path/to/tunnel-client" spellcheck="false" role="combobox" aria-haspopup="listbox" aria-controls="openai-binary-dropdown-menu" aria-expanded="false" aria-label="OpenAI tunnel-client binary path">
+              <button type="button" class="combobox-arrow-btn" id="openai-binary-arrow" title="Choose from detected binaries" aria-label="Choose detected tunnel binary" aria-controls="openai-binary-dropdown-menu" aria-expanded="false">
+                <svg viewBox="0 0 24 24"><path d="M7 10l5 5 5-5z"/></svg>
+              </button>
+              <div class="combobox-dropdown" id="openai-binary-dropdown-menu" style="display: none;" role="listbox" aria-label="Detected tunnel-client binaries"></div>
+            </div>
+            <button type="button" class="btn btn-secondary" id="openai-binary-browse-btn" style="height: 28px; padding: 0 10px; font-size: 11px;">Browse…</button>
+          </div>
+        </div>
+
+        <div class="setting-row is-dense" id="openai-tunnel-id-row" style="display: none;">
+          <div class="setting-label">Tunnel ID</div>
+          <input type="text" id="openai-tunnel-id" placeholder="tunnel_0123456789abcdef..." spellcheck="false" aria-label="OpenAI Tunnel ID">
+        </div>
+
+        <div class="setting-row is-dense" id="openai-api-key-row" style="display: none;">
+          <div class="setting-label">Tunnel API Key</div>
+          <div class="field-with-action">
+            <input type="password" id="openai-api-key" placeholder="sk-proj-... / Restricted Tunnel Key" spellcheck="false" autocomplete="off" aria-label="OpenAI Tunnel API Key">
+            <button type="button" class="btn btn-secondary" id="openai-api-key-toggle-btn" style="height: 28px; padding: 0 8px; font-size: 11px;" title="Show/Hide API Key">Show</button>
+          </div>
+        </div>
+
+        <div class="setting-row is-dense" id="cf-config-row">
+          <div class="setting-label">Config File</div>
+          <div class="input-combobox" id="cf-config-combobox-wrapper">
+            <input type="text" id="cf-config-path" placeholder="~/.cloudflared/config.yml" spellcheck="false" role="combobox" aria-haspopup="listbox" aria-controls="cf-config-dropdown-menu" aria-expanded="false" aria-label="Cloudflare config file path">
+            <button type="button" class="combobox-arrow-btn" id="cf-config-arrow" title="Choose from detected cloudflared config files" aria-label="Choose detected Cloudflare config file" aria-controls="cf-config-dropdown-menu" aria-expanded="false">
+              <svg viewBox="0 0 24 24"><path d="M7 10l5 5 5-5z"/></svg>
+            </button>
+            <div class="combobox-dropdown" id="cf-config-dropdown-menu" style="display: none;" role="listbox" aria-label="Detected Cloudflare config files"></div>
+          </div>
+        </div>
+
+        <div class="setting-row is-dense" id="custom-ssl-cert-row" style="display: none;">
+          <div class="setting-label">SSL Certificate</div>
+          <div class="field-with-action">
+            <div class="input-combobox" id="custom-ssl-cert-combobox-wrapper">
+              <input type="text" id="custom-ssl-cert-path" placeholder="~/.acme.sh/domain_ecc/fullchain.cer" spellcheck="false" role="combobox" aria-haspopup="listbox" aria-controls="custom-ssl-cert-dropdown-menu" aria-expanded="false" aria-label="SSL Certificate path">
+              <button type="button" class="combobox-arrow-btn" id="custom-ssl-cert-arrow" title="Choose from detected acme.sh certificates" aria-label="Choose detected SSL certificate" aria-controls="custom-ssl-cert-dropdown-menu" aria-expanded="false">
+                <svg viewBox="0 0 24 24"><path d="M7 10l5 5 5-5z"/></svg>
+              </button>
+              <div class="combobox-dropdown" id="custom-ssl-cert-dropdown-menu" style="display: none;" role="listbox" aria-label="Detected SSL certificates"></div>
+            </div>
+            <button type="button" class="btn btn-secondary" id="custom-ssl-cert-browse-btn" style="height: 28px; padding: 0 10px; font-size: 11px;">Browse…</button>
+          </div>
+        </div>
+
+        <div class="setting-row is-dense" id="custom-ssl-key-row" style="display: none;">
+          <div class="setting-label">SSL Private Key</div>
+          <div class="field-with-action">
+            <input type="text" id="custom-ssl-key-path" placeholder="~/.acme.sh/domain_ecc/domain.key" spellcheck="false" aria-label="SSL Private Key path">
+            <button type="button" class="btn btn-secondary" id="custom-ssl-key-browse-btn" style="height: 28px; padding: 0 10px; font-size: 11px;">Browse…</button>
+          </div>
+        </div>
+
+        <div class="setting-row is-dense" id="mcp-url-row">
+          <div class="setting-label">MCP Endpoint URL</div>
+          <div class="input-combobox" id="mcp-combobox-wrapper">
+            <input type="text" id="mcp-url" value="https://mcp.yourdomain.com" spellcheck="false" role="combobox" aria-haspopup="listbox" aria-controls="cf-dropdown-menu" aria-expanded="false" aria-label="MCP endpoint URL">
+            <button type="button" class="combobox-arrow-btn" id="cf-hostname-arrow" title="Choose from detected cloudflared hostnames" aria-label="Choose detected Cloudflare hostname" aria-controls="cf-dropdown-menu" aria-expanded="false">
+              <svg viewBox="0 0 24 24"><path d="M7 10l5 5 5-5z"/></svg>
+            </button>
+            <div class="combobox-dropdown" id="cf-dropdown-menu" role="listbox" aria-label="Detected Cloudflare hostnames"></div>
+          </div>
+        </div>
+
+        <div class="setting-row is-hint-row">
+          <div class="setting-label is-hint-label">Tunnel Setup</div>
+          <div class="field-hint" id="tunnel-install-hint" role="status" aria-live="polite">Requires Cloudflare config in Named/Quick tunnel mode. <a id="tunnel-doc-link" href="#" style="color: var(--blue-300); text-decoration: none;">Open setup docs</a>.</div>
+        </div>
+
+        <div class="setting-row is-action-row">
+          <div></div>
+          <button type="button" class="btn btn-secondary" id="save-network-btn" onclick="saveNetworkSettings()">Save</button>
+        </div>
+      </div>
+
+      <!-- Section 2: Connection Guide -->
+      <div class="section-heading">Connection Guide</div>
+      <div class="settings-card" style="padding: 12px 16px;">
+        <div id="endpoint-guide-container" style="width: 100%;"></div>
+      </div>
+
+      <!-- Section 3: Security & Credentials -->
+      <div class="section-heading">Access & Authorization</div>
+      <div class="settings-card">
+        <div class="setting-row">
+          <div class="setting-label">Admin Password</div>
+          <div style="display: flex; flex-direction: column; gap: 6px; width: 100%;">
+            <input type="password" id="admin-pass" placeholder="Set a secure password for OAuth approvals" autocomplete="off">
+            <div class="field-hint">Set once, used for all OAuth approval screens.</div>
+          </div>
+        </div>
+
+        <div class="setting-row is-action-row">
+          <div></div>
+          <button type="button" class="btn btn-secondary" id="save-access-btn" onclick="saveAccessSettings()">Save</button>
+        </div>
+      </div>
+
+      <!-- Section 4: Active Connections -->
+      <div class="section-heading">Active Connections</div>
+      <div class="settings-card" style="padding: 14px 16px;">
+        <div id="openai-connections-notice" style="display: none; padding: 4px 0 8px;">
+          <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
+            <span class="status-dot" style="background: var(--blue-300); width: 6px; height: 6px; border-radius: 50%; display: inline-block;"></span>
+            <strong style="font-size: 12px; color: var(--color-text-primary);">OpenAI Secure Ingress Managed</strong>
+          </div>
+          <div style="color: var(--color-text-secondary); font-size: 11px; line-height: 1.5;">
+            Traffic is securely routed through the outbound tunnel using your Tunnel ID and API Key. No OAuth 2.1 Passcode / Access Tokens required.
+          </div>
+        </div>
+
+        <div id="tokens-container">
+          <div id="tokens-list">
+            <div style="color: var(--color-text-tertiary); font-size: 12px;">No active connections.</div>
+          </div>
+
+          <div class="setting-row is-action-row" id="tokens-action-row" style="margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--color-border);">
+            <div></div>
+            <button class="btn btn-secondary" id="refresh-tokens-btn">Refresh Tokens</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 5: Tool Sandbox & Permissions -->
+      <div class="section-heading">Local Tool Sandbox</div>
+      <div class="settings-card">
+        <div class="setting-row">
+          <div class="setting-label">Filesystem Root</div>
+          <input type="text" id="fs-root" value="~/" placeholder="e.g. ~/ or /Users/yourname/Projects" spellcheck="false">
+        </div>
+
+        <div class="setting-row">
+          <div class="setting-label">Shell Policy</div>
+          <div class="input-combobox compact-combobox" id="shell-policy-combobox-wrapper">
+            <input type="text" id="shell-policy-display" value="Unrestricted" readonly spellcheck="false" style="cursor: pointer;" role="combobox" aria-haspopup="listbox" aria-controls="shell-policy-dropdown-menu" aria-expanded="false" aria-label="Shell policy">
+            <button type="button" class="combobox-arrow-btn" id="shell-policy-arrow" title="Select Shell Policy" aria-label="Select shell policy" aria-controls="shell-policy-dropdown-menu" aria-expanded="false">
+              <svg viewBox="0 0 24 24"><path d="M7 10l5 5 5-5z"/></svg>
+            </button>
+            <div class="combobox-dropdown" id="shell-policy-dropdown-menu" role="listbox" aria-label="Shell policies">
+              <div class="combobox-option" role="option" tabindex="-1" data-value="unrestricted"><span>Unrestricted</span><span style="color: var(--color-text-tertiary); font-size: 10px;">Allow all</span></div>
+              <div class="combobox-option" role="option" tabindex="-1" data-value="allowlist"><span>Allowlist only</span><span style="color: var(--color-text-tertiary); font-size: 10px;">Strict allowlist</span></div>
+              <div class="combobox-option" role="option" tabindex="-1" data-value="denylist"><span>Denylist enforced</span><span style="color: var(--color-text-tertiary); font-size: 10px;">Block denylist</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="setting-row" id="shell-allow-row">
+          <div class="setting-label">Shell Allowlist</div>
+          <input type="text" id="shell-allow" placeholder="e.g. ls, git, npm" spellcheck="false">
+        </div>
+
+        <div class="setting-row" id="shell-deny-row">
+          <div class="setting-label">Shell Denylist</div>
+          <div>
+            <input type="text" id="shell-deny" placeholder="e.g. rm, mkfs" spellcheck="false">
+            <div style="margin-top: 6px;">
+              <small id="shell-status" style="color: var(--orange-300); font-weight: 500;">Status: Unrestricted (All commands allowed)</small>
+            </div>
+          </div>
+        </div>
+
+        <div class="setting-row is-action-row">
+          <div></div>
+          <button type="button" class="btn btn-secondary" id="save-sandbox-btn" onclick="saveSandboxSettings()">Save</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- SURFACE 2: Logs & Audit Page -->
+    <div class="tab-surface" id="surface-logs">
+      <div class="logs-container">
+      <div class="surface-header">
+        <h1>Activity & Diagnostic Logs</h1>
+        <p>Monitor real-time MCP tool invocations, protocol payloads, and system tunnel diagnostics.</p>
+      </div>
+
+      <!-- Log Type Switcher -->
+      <div class="log-toolbar">
+        <div class="segmented-control" role="tablist">
+          <button class="segmented-btn is-active" id="log-subtab-mcp" type="button" onclick="switchLogSubtab('mcp')">MCP Tools</button>
+          <button class="segmented-btn" id="log-subtab-http" type="button" onclick="switchLogSubtab('http')">HTTP Requests</button>
+          <button class="segmented-btn" id="log-subtab-runtime" type="button" onclick="switchLogSubtab('runtime')">Tunnel</button>
+        </div>
+
+        <input id="log-search-input" class="log-search" type="search" placeholder="Search logs, tools, messages..." autocomplete="off">
+
+        <div style="display: flex; align-items: center; gap: 6px;">
+          <button type="button" class="btn btn-secondary" id="export-safe-log-btn" style="height: 26px; font-size: 11px; padding: 0 10px;" onclick="exportSafeLog()">Copy</button>
+          <button type="button" class="btn btn-secondary" id="clear-all-logs-btn" style="height: 26px; font-size: 11px; padding: 0 10px;" onclick="clearAllLogs()">Clear</button>
+        </div>
+      </div>
+
+      <!-- View A: MCP Invocations List -->
+      <div id="mcp-log-view">
+        <div class="activity-summary-grid">
+          <div class="activity-summary-card">
+            <strong id="metric-total-calls">0</strong>
+            <small>Total Tool Calls</small>
+          </div>
+          <div class="activity-summary-card" style="border-color: rgba(64, 201, 119, 0.3); background: rgba(64, 201, 119, 0.05);">
+            <strong id="metric-success-calls" style="color: var(--green-300);">0</strong>
+            <small>Successful</small>
+          </div>
+          <div class="activity-summary-card is-error">
+            <strong id="metric-error-calls" style="color: var(--red-300);">0</strong>
+            <small>Errors / Blocked</small>
+          </div>
+        </div>
+
+        <div class="section-heading">Recent Tool Invocations</div>
+        <div class="activity-table" id="activity-table-container">
+          <div class="activity-empty" id="activity-empty-state">Waiting for AI assistant tool invocations...</div>
+        </div>
+      </div>
+
+      <!-- View B: HTTP Inbound Requests List -->
+      <div id="http-log-view" style="display: none;">
+        <div class="activity-table" id="http-table-container" style="border: none; border-radius: 0;">
+          <div class="activity-empty" id="http-empty-state">Waiting for incoming HTTP requests...</div>
+        </div>
+      </div>
+
+      <!-- View C: Tunnel Terminal Stream -->
+      <div id="runtime-log-view" style="display: none;">
+        <div class="section-heading runtime-section-heading">Live Tunnel Process & Diagnostics</div>
+        <div class="runtime-log-stream" id="runtime-log-stream">
+          <div class="log-line"><span class="log-tag tag-system">[System]</span><span>Tunnel stream initialized. Ready for events.</span></div>
+        </div>
+      </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="renderer.js"></script>
+</body>
+</html>

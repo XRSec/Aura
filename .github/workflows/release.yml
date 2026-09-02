@@ -1,0 +1,134 @@
+name: Build & Release App
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: 'Version bump type'
+        required: true
+        default: 'patch'
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+          - none
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  prepare-version:
+    name: Bump Version & Prepare Release
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.get_version.outputs.version }}
+      tag_name: ${{ steps.get_version.outputs.tag_name }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.TOKEN_GITHUB }}
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Bump version
+        id: bump_step
+        if: >-
+          github.event_name == 'workflow_dispatch' &&
+          github.event.inputs.bump != 'none'
+        env:
+          INPUT_BUMP: ${{ github.event.inputs.bump }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email \
+            "github-actions[bot]@users.noreply.github.com"
+          NEW_VERSION=$(npm version "$INPUT_BUMP" \
+            -m "chore(release): %s [skip ci]")
+          git push origin HEAD --follow-tags
+          echo "NEW_TAG=$NEW_VERSION" >> "$GITHUB_ENV"
+
+      - name: Resolve Version and Tag
+        id: get_version
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          TAG="v$VERSION"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag_name=$TAG" >> "$GITHUB_OUTPUT"
+          echo "Target version is $VERSION (tag: $TAG)"
+
+  build-and-release:
+    name: Build & Publish (${{ matrix.os }})
+    needs: prepare-version
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            platform: mac
+            name: macOS
+          - os: windows-latest
+            platform: win
+            name: Windows
+          - os: ubuntu-latest
+            platform: linux
+            name: Linux
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.TOKEN_GITHUB }}
+          ref: ${{ needs.prepare-version.outputs.tag_name || github.ref }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libarchive-tools \
+            libfuse2
+
+      - name: Install dependencies
+        run: npm ci || npm install
+
+      - name: Build & Publish Electron App
+        env:
+          GH_TOKEN: ${{ secrets.TOKEN_GITHUB }}
+          GITHUB_TOKEN: ${{ secrets.TOKEN_GITHUB }}
+        run: |
+          if [ "${{ runner.os }}" = "macOS" ]; then
+            npx electron-builder --mac --publish always
+          elif [ "${{ runner.os }}" = "Windows" ]; then
+            npx electron-builder --win --publish always
+          else
+            npx electron-builder --linux --publish always
+          fi
+        shell: bash
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: aura-build-${{ matrix.platform }}
+          path: |
+            dist/*.dmg
+            dist/*.zip
+            dist/*.exe
+            dist/*.AppImage
+            dist/*.deb
+          if-no-files-found: warn
