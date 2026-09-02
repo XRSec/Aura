@@ -26,6 +26,7 @@ class McpGateway extends EventEmitter {
   }
 
   async createMcpServerInstance() {
+    const piEnabled = configManager.get('piEnabled') === true;
     const piBridge = new PiBridge({
       getFsRoot: () => configManager.get('fsRoot') || '~/',
       getAllowPiModelTools: () => configManager.get('piAllowModelTools') === true,
@@ -33,17 +34,33 @@ class McpGateway extends EventEmitter {
         this.logConnection('pi_bridge', level === 'warn' ? 'Warning' : 'Ready', { message, detail });
       }
     });
-    await piBridge.initialize();
+    if (piEnabled) await piBridge.initialize();
 
-    const server = new McpServer({
-      name: "Aura-MCP",
-      version: "1.0.0"
-    });
-    this.setupToolsForServer(server, piBridge);
+    const configuredInstructions = configManager.get('mcpInstructions');
+    const server = new McpServer(
+      {
+        name: "Aura-MCP",
+        version: "1.0.0"
+      },
+      {
+        instructions: typeof configuredInstructions === 'string' ? configuredInstructions : ''
+      }
+    );
+    this.setupToolsForServer(server, piBridge, { piEnabled });
     return { server, piBridge };
   }
 
   logExecution(tool, params, result) {
+    const httpCtx = this.authServer?.httpContext?.getStore();
+    const httpInfo = httpCtx ? {
+      method: httpCtx.method,
+      url: httpCtx.url,
+      ip: httpCtx.ip,
+      auth: httpCtx.auth,
+      requestId: httpCtx.requestId,
+      elapsedMs: Date.now() - (httpCtx.started || Date.now())
+    } : null;
+
     this.emit("execution-log", {
       timestamp: new Date().toISOString(),
       tool,
@@ -51,17 +68,14 @@ class McpGateway extends EventEmitter {
       result: result.isError ? "Error" : "Success",
       output: result.output,
       error: result.error,
-      duration: result.duration
+      duration: result.duration,
+      http: httpInfo
     });
   }
 
-  logConnection(tool, result, params = {}) {
-    this.emit("execution-log", {
-      timestamp: new Date().toISOString(),
-      tool,
-      params,
-      result
-    });
+  logConnection(event, result, params = {}) {
+    // Connection lifecycle events are internal runtime state, not AI tool invocations.
+    // They are not added to MCP Tools log.
   }
 
   isAuthorized(req) {
@@ -92,9 +106,16 @@ class McpGateway extends EventEmitter {
     return resolvedTarget;
   }
 
-  setupToolsForServer(server, piBridge) {
+  setupToolsForServer(server, piBridge, { piEnabled = false } = {}) {
     const piToolHandles = new Map();
-    const piSkillCatalog = piBridge.available
+    const configuredPiTools = Array.isArray(configManager.get('piTools')) ? configManager.get('piTools') : [];
+    const configuredPiToolNames = new Set(configuredPiTools);
+    const exposedPiTools = piEnabled && piBridge.available
+      ? piBridge.listTools().filter(tool => configuredPiToolNames.has(tool.name))
+      : [];
+    const exposedPiToolNames = exposedPiTools.map(tool => tool.name);
+    const usePiResources = piEnabled && piBridge.available;
+    const piSkillCatalog = usePiResources
       ? piBridge.listSkills().map(skill => `- ${skill.name}: ${skill.description || 'No description provided.'}`).join('\n')
       : this.skillRegistry.catalogText();
 
@@ -106,7 +127,7 @@ class McpGateway extends EventEmitter {
         try {
           let text;
           let count;
-          if (piBridge.available) {
+          if (usePiResources) {
             const skills = piBridge.listSkills();
             count = skills.length;
             text = skills.length
@@ -143,7 +164,7 @@ class McpGateway extends EventEmitter {
       async ({ skill, path: skillPath }) => {
         const startedAt = Date.now();
         try {
-          const result = piBridge.available
+          const result = usePiResources
             ? piBridge.readSkill(skill, skillPath || 'SKILL.md')
             : this.skillRegistry.read(skill, skillPath || 'SKILL.md');
           const duration = Date.now() - startedAt;
@@ -168,9 +189,9 @@ class McpGateway extends EventEmitter {
       }
     );
 
-    const capabilityDescription = piBridge.available
-      ? `Enable registered Pi tools or load Pi Skills only when needed. Tool schemas are added to this MCP session after activation. Aura invokes Pi tool execute() directly and never calls Pi session.prompt(), so the bridge itself does not spend Pi default-model tokens. Pi model-backed tools are blocked unless Aura's piAllowModelTools setting is enabled.\n\nInactive capabilities:\n${piBridge.catalogText()}`
-      : `Pi capability bridge is unavailable. Core Aura tools and locally discovered Skills remain usable.\n\n${piBridge.catalogText()}`;
+    const capabilityDescription = usePiResources
+      ? `Enable only the Pi tools selected in Aura Settings or load Pi Skills when needed. If the user explicitly names an inactive selected Pi capability, activate that capability here instead of emulating it with execute_shell or another tool. Tool schemas are added to this MCP session after activation. Aura invokes Pi tool execute() directly and never calls Pi session.prompt().\n\nInactive capabilities:\n${piBridge.catalogText({ toolNames: exposedPiToolNames })}`
+      : `Pi capabilities are disabled in Aura Settings. Core Aura tools and locally discovered Skills remain usable.`;
 
     server.registerTool(
       "request_capabilities",
@@ -191,7 +212,7 @@ class McpGateway extends EventEmitter {
             throw new Error(piBridge.initError?.message || 'Pi bridge is unavailable.');
           }
 
-          const toolActivation = piBridge.enableTools(tools);
+          const toolActivation = piBridge.enableTools(tools, exposedPiToolNames);
           for (const name of [...toolActivation.enabled, ...toolActivation.alreadyActive]) {
             piToolHandles.get(name)?.enable();
           }
@@ -231,8 +252,8 @@ class McpGateway extends EventEmitter {
       }
     );
 
-    if (piBridge.available) {
-      for (const piTool of piBridge.listTools()) {
+    if (usePiResources) {
+      for (const piTool of exposedPiTools) {
         try {
           const registered = server.registerTool(
             piTool.name,
@@ -316,6 +337,7 @@ class McpGateway extends EventEmitter {
 
     // 3. Shell Execution (Unrestricted/Allow/Deny)
     server.tool("execute_shell",
+      "Execute a shell command under Aura's shell policy. Do not use shell to emulate a Pi capability explicitly requested by the user; activate the named capability with request_capabilities first.",
       { command: z.string().describe("Shell command to execute") },
       async ({ command }) => {
         const startedAt = Date.now();
@@ -386,21 +408,22 @@ class McpGateway extends EventEmitter {
         let session = sessionId ? sessions.get(sessionId) : null;
 
         if (!session && req.method === 'POST' && isInitializeRequest(req.body)) {
-          const mcpServer = this.createMcpServerInstance();
+          const { server: mcpServer, piBridge } = await this.createMcpServerInstance();
           const transport = new StreamableHTTPServerTransport({
             sessionIdGenerator: () => randomUUID(),
             enableJsonResponse: true,
             onsessioninitialized: id => {
-              sessions.set(id, { transport, server: mcpServer });
+              sessions.set(id, { transport, server: mcpServer, piBridge });
               this.logConnection('mcp_connect', 'Connected', { sessionId: id, path: streamablePath });
             }
           });
           transport.onclose = () => {
+            piBridge.dispose();
             if (transport.sessionId) sessions.delete(transport.sessionId);
             this.logConnection('mcp_disconnect', 'Closed', { sessionId: transport.sessionId });
           };
           await mcpServer.connect(transport);
-          session = { transport, server: mcpServer };
+          session = { transport, server: mcpServer, piBridge };
         }
 
         if (!session || !session.transport) {
@@ -417,7 +440,6 @@ class McpGateway extends EventEmitter {
     });
 
     // Deprecated HTTP+SSE compatibility for older clients.
-    let legacyTransport;
     const ssePath = `${streamablePath}/sse`;
     const messagesPath = `${streamablePath}/messages`;
     app.get(ssePath, async (req, res) => {
@@ -426,9 +448,21 @@ class McpGateway extends EventEmitter {
         return res.status(401).send('Unauthorized');
       }
       try {
-        legacyTransport = new SSEServerTransport(messagesPath, res);
-        legacyTransport.onclose = () => this.logConnection('mcp_sse', 'Closed', { path: ssePath });
-        await this.mcp.connect(legacyTransport);
+        if (this.legacySession) {
+          try { await this.legacySession.server.close(); } catch {}
+          this.legacySession.piBridge.dispose();
+          this.legacySession = null;
+        }
+
+        const { server: mcpServer, piBridge } = await this.createMcpServerInstance();
+        const legacyTransport = new SSEServerTransport(messagesPath, res);
+        this.legacySession = { transport: legacyTransport, server: mcpServer, piBridge };
+        legacyTransport.onclose = () => {
+          piBridge.dispose();
+          if (this.legacySession?.transport === legacyTransport) this.legacySession = null;
+          this.logConnection('mcp_sse', 'Closed', { path: ssePath });
+        };
+        await mcpServer.connect(legacyTransport);
         this.logConnection('mcp_sse', 'Connected', { path: ssePath });
       } catch (error) {
         this.logConnection('mcp_sse', 'Error', { message: error.message });
@@ -437,9 +471,25 @@ class McpGateway extends EventEmitter {
     });
     app.post(messagesPath, async (req, res) => {
       if (!this.isAuthorized(req)) return res.status(401).send('Unauthorized');
-      if (!legacyTransport) return res.status(400).send('No active SSE connection');
-      await legacyTransport.handlePostMessage(req, res, req.body);
+      if (!this.legacySession?.transport) return res.status(400).send('No active SSE connection');
+      await this.legacySession.transport.handlePostMessage(req, res, req.body);
     });
+  }
+
+  async close() {
+    const activeSessions = Array.from(this.sessions.values());
+    this.sessions.clear();
+    for (const session of activeSessions) {
+      session.piBridge?.dispose();
+      try { await session.server?.close(); } catch {}
+    }
+
+    if (this.legacySession) {
+      const legacy = this.legacySession;
+      this.legacySession = null;
+      legacy.piBridge?.dispose();
+      try { await legacy.server?.close(); } catch {}
+    }
   }
 }
 

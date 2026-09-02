@@ -14,25 +14,41 @@ const shellPolicyLabels = {
 // Listen to Real-time Logs via IPC immediately at top level
 const mcpLogs = [];
 const httpLogs = [];
+const tunnelLogs = [];
 const runtimeLogs = [];
+let piCapabilityTools = [];
+let piCapabilitiesLoaded = false;
+let piCapabilitiesLoadPromise = null;
+let savedMcpInstructions = '';
+let savedPiEnabled = false;
+let savedPiToolNames = new Set();
 
 window.api.onMcpLog((logEntry) => {
   mcpLogs.push(logEntry);
   if (mcpLogs.length > 500) mcpLogs.shift();
   renderMcpLogItem(logEntry);
   updateMcpMetrics();
+  updateAllMetrics();
 });
 
 window.api.onHttpLog((logEntry) => {
   httpLogs.push(logEntry);
   if (httpLogs.length > 500) httpLogs.shift();
   renderHttpLogItem(logEntry);
+  updateHttpMetrics();
+  updateAllMetrics();
+});
+
+window.api.onTunnelLog((logEntry) => {
+  tunnelLogs.push(logEntry);
+  if (tunnelLogs.length > 1000) tunnelLogs.shift();
+  renderTunnelLogItem(logEntry);
 });
 
 window.api.onRuntimeLog((logEntry) => {
   runtimeLogs.push(logEntry);
   if (runtimeLogs.length > 1000) runtimeLogs.shift();
-  appendRuntimeLog(logEntry);
+  renderRuntimeLogItem(logEntry);
 });
 
 function switchMainTab(targetTab) {
@@ -79,27 +95,39 @@ function switchMainTab(targetTab) {
 }
 
 function switchLogSubtab(targetSubtab) {
+  const subtabAll = document.getElementById('log-subtab-all');
   const subtabMcp = document.getElementById('log-subtab-mcp');
   const subtabHttp = document.getElementById('log-subtab-http');
+  const subtabTunnel = document.getElementById('log-subtab-tunnel');
   const subtabRuntime = document.getElementById('log-subtab-runtime');
+  const allLogView = document.getElementById('all-log-view');
   const mcpLogView = document.getElementById('mcp-log-view');
   const httpLogView = document.getElementById('http-log-view');
+  const tunnelLogView = document.getElementById('tunnel-log-view');
   const runtimeLogView = document.getElementById('runtime-log-view');
 
-  [subtabMcp, subtabHttp, subtabRuntime].filter(Boolean).forEach(btn => btn.classList.remove('is-active'));
+  [subtabAll, subtabMcp, subtabHttp, subtabTunnel, subtabRuntime].filter(Boolean).forEach(btn => btn.classList.remove('is-active'));
+  if (allLogView) allLogView.style.display = 'none';
   if (mcpLogView) mcpLogView.style.display = 'none';
   if (httpLogView) httpLogView.style.display = 'none';
+  if (tunnelLogView) tunnelLogView.style.display = 'none';
   if (runtimeLogView) runtimeLogView.style.display = 'none';
 
-  if (targetSubtab === 'mcp') {
+  if (targetSubtab === 'all') {
+    if (subtabAll) subtabAll.classList.add('is-active');
+    if (allLogView) allLogView.style.display = 'block';
+  } else if (targetSubtab === 'mcp') {
     if (subtabMcp) subtabMcp.classList.add('is-active');
     if (mcpLogView) mcpLogView.style.display = 'grid';
   } else if (targetSubtab === 'http') {
     if (subtabHttp) subtabHttp.classList.add('is-active');
     if (httpLogView) httpLogView.style.display = 'block';
+  } else if (targetSubtab === 'tunnel') {
+    if (subtabTunnel) subtabTunnel.classList.add('is-active');
+    if (tunnelLogView) tunnelLogView.style.display = 'block';
   } else if (targetSubtab === 'runtime') {
     if (subtabRuntime) subtabRuntime.classList.add('is-active');
-    if (runtimeLogView) runtimeLogView.style.display = 'flex';
+    if (runtimeLogView) runtimeLogView.style.display = 'block';
   }
 }
 
@@ -108,13 +136,7 @@ window.switchLogSubtab = switchLogSubtab;
 
 function filterLogs(keyword) {
   const q = String(keyword || '').trim().toLowerCase();
-  document.querySelectorAll('.activity-item').forEach(item => {
-    item.style.display = !q || item.textContent.toLowerCase().includes(q) ? '' : 'none';
-  });
-  document.querySelectorAll('.http-log-item').forEach(item => {
-    item.style.display = !q || item.textContent.toLowerCase().includes(q) ? '' : 'none';
-  });
-  document.querySelectorAll('#runtime-log-stream .log-line').forEach(item => {
+  document.querySelectorAll('.activity-item, .http-log-item, .tunnel-log-item, .runtime-log-item').forEach(item => {
     item.style.display = !q || item.textContent.toLowerCase().includes(q) ? '' : 'none';
   });
 }
@@ -140,6 +162,140 @@ function focusInput(el, isActive) {
   } else {
     el.classList.remove('is-focused');
   }
+}
+
+function getSelectedPiToolNames() {
+  if (!piCapabilitiesLoaded) return Array.from(savedPiToolNames).sort();
+  return Array.from(document.querySelectorAll('#pi-tools-list .pi-tool-checkbox:checked'))
+    .map(input => input.value)
+    .sort();
+}
+
+function updatePiToolsSummary() {
+  const summary = document.getElementById('pi-tools-summary');
+  if (!summary) return;
+  if (!piCapabilitiesLoaded) {
+    summary.textContent = 'Loading Pi tools...';
+    return;
+  }
+  summary.textContent = `${getSelectedPiToolNames().length} selected · ${piCapabilityTools.length} available`;
+}
+
+function updateMcpCapabilitiesSaveState() {
+  const saveBtn = document.getElementById('save-mcp-capabilities-btn');
+  const instructions = document.getElementById('mcp-instructions');
+  const piToggle = document.getElementById('pi-enabled-toggle');
+  if (!saveBtn || !instructions || !piToggle) return;
+  const savedTools = Array.from(savedPiToolNames).sort();
+  const currentTools = getSelectedPiToolNames();
+  const dirty = instructions.value !== savedMcpInstructions
+    || piToggle.checked !== savedPiEnabled
+    || JSON.stringify(currentTools) !== JSON.stringify(savedTools);
+  saveBtn.classList.toggle('btn-primary', dirty);
+}
+
+function renderPiCapabilityTools(result) {
+  const list = document.getElementById('pi-tools-list');
+  const version = document.getElementById('pi-version-label');
+  if (!list) return;
+  list.replaceChildren();
+  piCapabilityTools = Array.isArray(result?.tools) ? result.tools : [];
+  piCapabilitiesLoaded = true;
+  if (version) version.textContent = result?.available && result?.version ? `Pi ${result.version}` : '';
+
+  if (!result?.available) {
+    const empty = document.createElement('div');
+    empty.className = 'pi-tools-empty';
+    empty.textContent = `Pi unavailable: ${result?.error || 'installation not found'}`;
+    list.appendChild(empty);
+    updatePiToolsSummary();
+    updateMcpCapabilitiesSaveState();
+    return;
+  }
+
+  if (piCapabilityTools.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'pi-tools-empty';
+    empty.textContent = 'No Pi tools discovered.';
+    list.appendChild(empty);
+  }
+
+  for (const tool of piCapabilityTools) {
+    const row = document.createElement('label');
+    row.className = 'pi-tool-item';
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.className = 'pi-tool-checkbox';
+    checkbox.value = tool.name;
+    checkbox.checked = savedPiToolNames.has(tool.name);
+    checkbox.addEventListener('change', () => {
+      updatePiToolsSummary();
+      updateMcpCapabilitiesSaveState();
+    });
+
+    const body = document.createElement('div');
+    const nameRow = document.createElement('div');
+    nameRow.className = 'pi-tool-name-row';
+    const name = document.createElement('span');
+    name.className = 'pi-tool-name';
+    name.textContent = tool.name;
+    nameRow.appendChild(name);
+    if (tool.usesPiDefaultModel) {
+      const warning = document.createElement('span');
+      warning.className = 'pi-tool-token-warning';
+      warning.textContent = 'May use Pi model tokens';
+      nameRow.appendChild(warning);
+    }
+    const description = document.createElement('div');
+    description.className = 'pi-tool-description';
+    description.textContent = tool.description || 'No description provided.';
+    body.append(nameRow, description);
+    row.append(checkbox, body);
+    list.appendChild(row);
+  }
+
+  updatePiToolsSummary();
+  updateMcpCapabilitiesSaveState();
+}
+
+async function ensurePiCapabilitiesLoaded() {
+  if (piCapabilitiesLoaded) return;
+  if (piCapabilitiesLoadPromise) return piCapabilitiesLoadPromise;
+  const list = document.getElementById('pi-tools-list');
+  if (list) list.innerHTML = '<div class="pi-tools-empty">Loading Pi tool registry...</div>';
+  piCapabilitiesLoadPromise = window.api.getPiCapabilities()
+    .then(result => renderPiCapabilityTools(result))
+    .catch(error => renderPiCapabilityTools({ available: false, tools: [], error: error.message }))
+    .finally(() => { piCapabilitiesLoadPromise = null; });
+  return piCapabilitiesLoadPromise;
+}
+
+async function initializeMcpCapabilitySettings(config) {
+  const instructions = document.getElementById('mcp-instructions');
+  const piToggle = document.getElementById('pi-enabled-toggle');
+  const panel = document.getElementById('pi-tools-panel');
+  const saveBtn = document.getElementById('save-mcp-capabilities-btn');
+  if (!instructions || !piToggle || !panel || !saveBtn) return;
+
+  savedMcpInstructions = typeof config.mcpInstructions === 'string' ? config.mcpInstructions : '';
+  savedPiEnabled = config.piEnabled === true;
+  savedPiToolNames = new Set(Array.isArray(config.piTools) ? config.piTools : []);
+  instructions.value = savedMcpInstructions;
+  piToggle.checked = savedPiEnabled;
+  panel.style.display = piToggle.checked ? 'block' : 'none';
+
+  instructions.addEventListener('input', updateMcpCapabilitiesSaveState);
+  instructions.addEventListener('focus', () => focusInput(instructions, true));
+  instructions.addEventListener('blur', () => focusInput(instructions, false));
+  piToggle.addEventListener('change', async () => {
+    panel.style.display = piToggle.checked ? 'block' : 'none';
+    if (piToggle.checked) await ensurePiCapabilitiesLoaded();
+    updateMcpCapabilitiesSaveState();
+  });
+  saveBtn.addEventListener('click', saveMcpCapabilitySettings);
+
+  if (piToggle.checked) await ensurePiCapabilitiesLoaded();
+  updateMcpCapabilitiesSaveState();
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -181,6 +337,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     debugToggle.checked = !!config.debugMode;
   }
 
+  await initializeMcpCapabilitySettings(config);
   await populateListenAddresses(config.listenHost);
   await loadProviderFields(currentMode, config);
 
@@ -303,27 +460,44 @@ document.addEventListener('DOMContentLoaded', async () => {
 async function loadInitialLogs() {
   try {
     const data = await window.api.getRecentLogs();
-    if (data && Array.isArray(data.runtimeLogs) && data.runtimeLogs.length > 0) {
-      const stream = document.getElementById('runtime-log-stream');
-      if (stream) stream.replaceChildren();
-      data.runtimeLogs.forEach(entry => {
-        runtimeLogs.push(entry);
-        appendRuntimeLog(entry);
+    if (data && Array.isArray(data.tunnelLogs)) {
+      data.tunnelLogs.forEach(entry => {
+        tunnelLogs.push(entry);
+        renderTunnelLogItem(entry);
       });
     }
-    if (data && Array.isArray(data.httpLogs) && data.httpLogs.length > 0) {
+    if (data && Array.isArray(data.appRuntimeLogs)) {
+      data.appRuntimeLogs.forEach(entry => {
+        runtimeLogs.push(entry);
+        renderRuntimeLogItem(entry);
+      });
+    }
+
+    // Load merged MCP & HTTP items in chronological order
+    const events = [];
+    if (data && Array.isArray(data.httpLogs)) {
       data.httpLogs.forEach(entry => {
         httpLogs.push(entry);
-        renderHttpLogItem(entry);
+        events.push({ type: 'http', data: entry, time: new Date(entry.timestamp).getTime() });
       });
     }
-    if (data && Array.isArray(data.mcpLogs) && data.mcpLogs.length > 0) {
+    if (data && Array.isArray(data.mcpLogs)) {
       data.mcpLogs.forEach(entry => {
         mcpLogs.push(entry);
-        renderMcpLogItem(entry);
+        events.push({ type: 'mcp', data: entry, time: new Date(entry.timestamp).getTime() });
       });
-      updateMcpMetrics();
     }
+
+    events.sort((a, b) => a.time - b.time);
+    events.forEach(evt => {
+      if (evt.type === 'http') {
+        renderHttpLogItem(evt.data);
+      } else {
+        renderMcpLogItem(evt.data);
+      }
+    });
+
+    updateMcpMetrics();
   } catch (err) {
     console.error('Failed to load initial logs:', err);
   }
@@ -1002,6 +1176,45 @@ async function saveAccessSettings() {
   }
 }
 
+async function saveMcpCapabilitySettings() {
+  const saveBtn = document.getElementById('save-mcp-capabilities-btn');
+  const instructions = document.getElementById('mcp-instructions');
+  const piToggle = document.getElementById('pi-enabled-toggle');
+  if (!saveBtn || !instructions || !piToggle) return;
+
+  if (piToggle.checked && !piCapabilitiesLoaded) {
+    await ensurePiCapabilitiesLoaded();
+  }
+
+  const selectedTools = getSelectedPiToolNames();
+  const selectedToolSet = new Set(selectedTools);
+  const allowPiModelTools = piCapabilityTools.some(tool => tool.usesPiDefaultModel && selectedToolSet.has(tool.name));
+
+  saveBtn.classList.add('is-loading');
+  try {
+    await window.api.saveConfig({
+      mcpInstructions: instructions.value,
+      piEnabled: piToggle.checked,
+      piTools: selectedTools,
+      piAllowModelTools: allowPiModelTools
+    });
+
+    savedMcpInstructions = instructions.value;
+    savedPiEnabled = piToggle.checked;
+    savedPiToolNames = new Set(selectedTools);
+    updateMcpCapabilitiesSaveState();
+    flashSaveFeedback(saveBtn);
+
+    const isRunning = await window.api.getServiceState();
+    if (isRunning) await restartCurrentServices();
+  } catch (err) {
+    console.error('Failed to save MCP/Pi settings:', err);
+    flashTransientHint('Failed to save MCP/Pi settings: ' + err.message, 'tunnel-install-hint');
+  } finally {
+    saveBtn.classList.remove('is-loading');
+  }
+}
+
 async function saveSandboxSettings() {
   const sandboxSaveBtn = document.getElementById('save-sandbox-btn');
   const fsInput = document.getElementById('fs-root');
@@ -1527,23 +1740,51 @@ window.api.onUrlUpdated((url) => {
 });
 
 // --- Tab Switcher (Settings / Logs) & Sub-tabs Initialized in switchMainTab/switchLogSubtab ---
+function updateAllMetrics() {
+  const mcpTotal = mcpLogs.length;
+  const httpTotal = httpLogs.length;
+  const total = mcpTotal + httpTotal;
+  const mcpErrors = mcpLogs.filter(l => l.result !== 'Success').length;
+  const httpErrors = httpLogs.filter(l => l.status >= 400).length;
+  const totalErrors = mcpErrors + httpErrors;
+
+  const elTotal = document.getElementById('metric-all-total');
+  const elMcp = document.getElementById('metric-all-mcp');
+  const elHttp = document.getElementById('metric-all-http');
+  const elErrors = document.getElementById('metric-all-errors');
+  if (elTotal) elTotal.textContent = String(total);
+  if (elMcp) elMcp.textContent = String(mcpTotal);
+  if (elHttp) elHttp.textContent = String(httpTotal);
+  if (elErrors) elErrors.textContent = String(totalErrors);
+}
+
 function updateMcpMetrics() {
   const total = mcpLogs.length;
   const success = mcpLogs.filter(l => l.result === 'Success').length;
   const errors = total - success;
 
-  document.getElementById('metric-total-calls').textContent = String(total);
-  document.getElementById('metric-success-calls').textContent = String(success);
-  document.getElementById('metric-error-calls').textContent = String(errors);
+  const elTotal = document.getElementById('metric-total-calls');
+  const elSuccess = document.getElementById('metric-success-calls');
+  const elErrors = document.getElementById('metric-error-calls');
+  if (elTotal) elTotal.textContent = String(total);
+  if (elSuccess) elSuccess.textContent = String(success);
+  if (elErrors) elErrors.textContent = String(errors);
 }
 
-function renderHttpLogItem(entry) {
-  const emptyState = document.getElementById('http-empty-state');
-  if (emptyState) emptyState.remove();
+function updateHttpMetrics() {
+  const total = httpLogs.length;
+  const success = httpLogs.filter(l => l.status < 400).length;
+  const errors = total - success;
 
-  const container = document.getElementById('http-table-container');
-  if (!container) return;
+  const elTotal = document.getElementById('metric-http-total');
+  const elSuccess = document.getElementById('metric-http-success');
+  const elErrors = document.getElementById('metric-http-errors');
+  if (elTotal) elTotal.textContent = String(total);
+  if (elSuccess) elSuccess.textContent = String(success);
+  if (elErrors) elErrors.textContent = String(errors);
+}
 
+function createHttpLogElement(entry, isMerged = false) {
   const details = document.createElement('details');
   details.className = 'activity-item http-log-item';
 
@@ -1565,6 +1806,13 @@ function renderHttpLogItem(entry) {
 
   const headerLine = document.createElement('div');
   headerLine.className = 'activity-header-line';
+
+  if (isMerged) {
+    const flowBadge = document.createElement('span');
+    flowBadge.className = 'flow-badge badge-http';
+    flowBadge.textContent = 'HTTP';
+    headerLine.appendChild(flowBadge);
+  }
 
   const methodBadge = document.createElement('span');
   methodBadge.className = `http-method-badge http-method-${method}`;
@@ -1644,21 +1892,44 @@ function renderHttpLogItem(entry) {
 
   details.appendChild(summary);
   details.appendChild(panel);
+  return details;
+}
 
-  if (container.firstChild) {
-    container.insertBefore(details, container.firstChild);
-  } else {
-    container.appendChild(details);
+function renderHttpLogItem(entry, onlyMerged) {
+  // 1. Render to dedicated HTTP Requests container (unless onlyMerged is true)
+  if (onlyMerged !== true) {
+    const httpEmpty = document.getElementById('http-empty-state');
+    if (httpEmpty) httpEmpty.remove();
+    const httpContainer = document.getElementById('http-table-container');
+    if (httpContainer) {
+      const el = createHttpLogElement(entry, false);
+      if (httpContainer.firstChild) {
+        httpContainer.insertBefore(el, httpContainer.firstChild);
+      } else {
+        httpContainer.appendChild(el);
+      }
+    }
+  }
+
+  // 2. Render to merged All (MCP + HTTP) container (unless onlyMerged is false)
+  if (onlyMerged !== false) {
+    const allEmpty = document.getElementById('all-empty-state');
+    if (allEmpty) allEmpty.remove();
+    const allContainer = document.getElementById('all-table-container');
+    if (allContainer) {
+      const elAll = createHttpLogElement(entry, true);
+      if (allContainer.firstChild) {
+        allContainer.insertBefore(elAll, allContainer.firstChild);
+      } else {
+        allContainer.appendChild(elAll);
+      }
+    }
   }
 }
 
-function renderMcpLogItem(entry) {
-  const emptyState = document.getElementById('activity-empty-state');
-  if (emptyState) emptyState.remove();
-
-  const container = document.getElementById('activity-table-container');
+function createMcpLogElement(entry, isMerged = false) {
   const details = document.createElement('details');
-  details.className = 'activity-item';
+  details.className = 'activity-item mcp-log-item';
 
   const isSuccess = entry.result === 'Success';
   const time = new Date(entry.timestamp).toLocaleTimeString();
@@ -1684,6 +1955,13 @@ function renderMcpLogItem(entry) {
 
   const headerLine = document.createElement('div');
   headerLine.className = 'activity-header-line';
+
+  if (isMerged) {
+    const flowBadge = document.createElement('span');
+    flowBadge.className = 'flow-badge badge-mcp';
+    flowBadge.textContent = 'MCP';
+    headerLine.appendChild(flowBadge);
+  }
 
   const toolBadge = document.createElement('span');
   toolBadge.className = 'tool-badge';
@@ -1771,6 +2049,122 @@ function renderMcpLogItem(entry) {
 
   details.appendChild(summary);
   details.appendChild(panel);
+  return details;
+}
+
+function renderMcpLogItem(entry, onlyMerged) {
+  // 1. Render to dedicated MCP Tools container (unless onlyMerged is true)
+  if (onlyMerged !== true) {
+    const mcpEmpty = document.getElementById('activity-empty-state');
+    if (mcpEmpty) mcpEmpty.remove();
+    const mcpContainer = document.getElementById('activity-table-container');
+    if (mcpContainer) {
+      const el = createMcpLogElement(entry, false);
+      if (mcpContainer.firstChild) {
+        mcpContainer.insertBefore(el, mcpContainer.firstChild);
+      } else {
+        mcpContainer.appendChild(el);
+      }
+    }
+  }
+
+  // 2. Render to merged All (MCP + HTTP) container (unless onlyMerged is false)
+  if (onlyMerged !== false) {
+    const allEmpty = document.getElementById('all-empty-state');
+    if (allEmpty) allEmpty.remove();
+    const allContainer = document.getElementById('all-table-container');
+    if (allContainer) {
+      const elAll = createMcpLogElement(entry, true);
+      if (allContainer.firstChild) {
+        allContainer.insertBefore(elAll, allContainer.firstChild);
+      } else {
+        allContainer.appendChild(elAll);
+      }
+    }
+  }
+}
+
+function renderTunnelLogItem(entry) {
+  const emptyState = document.getElementById('tunnel-empty-state');
+  if (emptyState) emptyState.remove();
+
+  const container = document.getElementById('tunnel-table-container');
+  if (!container) return;
+
+  const details = document.createElement('details');
+  details.className = 'activity-item tunnel-log-item';
+
+  const level = (entry.level || 'info').toLowerCase();
+  const isErr = level === 'error';
+  const isWarn = level === 'warn';
+  const time = new Date(entry.timestamp).toLocaleTimeString();
+
+  // Summary row
+  const summary = document.createElement('summary');
+
+  const dot = document.createElement('div');
+  dot.className = `activity-dot ${isErr ? 'is-error' : (isWarn ? 'is-warn' : 'is-success')}`;
+
+  const meta = document.createElement('div');
+  meta.className = 'activity-meta';
+
+  const headerLine = document.createElement('div');
+  headerLine.className = 'activity-header-line';
+
+  const levelBadge = document.createElement('span');
+  levelBadge.className = `tunnel-level-badge tunnel-level-${level}`;
+  levelBadge.textContent = level.toUpperCase();
+
+  const msgSpan = document.createElement('span');
+  msgSpan.className = 'activity-summary-text';
+  msgSpan.textContent = entry.message || '';
+
+  headerLine.appendChild(levelBadge);
+  headerLine.appendChild(msgSpan);
+  meta.appendChild(headerLine);
+
+  const timeWrapper = document.createElement('div');
+  timeWrapper.style.display = 'flex';
+  timeWrapper.style.alignItems = 'center';
+  timeWrapper.style.gap = '8px';
+
+  const timeEl = document.createElement('time');
+  timeEl.className = 'activity-time';
+  timeEl.textContent = time;
+  timeWrapper.appendChild(timeEl);
+
+  const chevron = document.createElement('div');
+  chevron.className = 'activity-chevron';
+  chevron.textContent = '▶';
+
+  summary.appendChild(dot);
+  summary.appendChild(meta);
+  summary.appendChild(timeWrapper);
+  summary.appendChild(chevron);
+
+  // Details panel
+  const panel = document.createElement('div');
+  panel.className = 'activity-details-panel';
+
+  const detailSection = document.createElement('div');
+  const detailLabel = document.createElement('div');
+  detailLabel.style.fontSize = '10px';
+  detailLabel.style.fontWeight = '600';
+  detailLabel.style.color = isErr ? 'var(--red-300)' : 'var(--color-text-tertiary)';
+  detailLabel.style.textTransform = 'uppercase';
+  detailLabel.style.marginBottom = '4px';
+  detailLabel.textContent = 'Event Details';
+
+  const detailCode = document.createElement('pre');
+  detailCode.className = 'activity-code-block';
+  detailCode.textContent = entry.detail ? JSON.stringify(entry.detail, null, 2) : (entry.message || '(No extra details)');
+
+  detailSection.appendChild(detailLabel);
+  detailSection.appendChild(detailCode);
+  panel.appendChild(detailSection);
+
+  details.appendChild(summary);
+  details.appendChild(panel);
 
   if (container.firstChild) {
     container.insertBefore(details, container.firstChild);
@@ -1779,55 +2173,94 @@ function renderMcpLogItem(entry) {
   }
 }
 
-function appendRuntimeLog(entry) {
-  const stream = document.getElementById('runtime-log-stream');
-  if (!stream) return;
+function renderRuntimeLogItem(entry) {
+  const emptyState = document.getElementById('runtime-empty-state');
+  if (emptyState) emptyState.remove();
 
-  const line = document.createElement('div');
-  const levelClass = entry.level === 'error' ? 'is-error' : entry.level === 'warn' ? 'is-warn' : entry.level === 'debug' ? 'is-debug' : '';
-  line.className = `log-line ${levelClass}`;
+  const container = document.getElementById('runtime-table-container');
+  if (!container) return;
 
+  const details = document.createElement('details');
+  details.className = 'activity-item runtime-log-item';
+
+  const level = (entry.level || 'info').toLowerCase();
+  const isErr = level === 'error';
+  const isWarn = level === 'warn';
   const time = new Date(entry.timestamp).toLocaleTimeString();
-  const sourceTag = (entry.source || 'System').toLowerCase();
+  const source = entry.source || 'App';
 
-  const timeSpan = document.createElement('span');
-  timeSpan.style.color = 'var(--color-text-disabled)';
-  timeSpan.style.fontSize = '10px';
-  timeSpan.style.marginRight = '6px';
-  timeSpan.textContent = `[${time}]`;
+  // Summary row
+  const summary = document.createElement('summary');
 
-  const tagSpan = document.createElement('span');
-  tagSpan.className = `log-tag tag-${sourceTag}`;
-  tagSpan.textContent = `[${entry.source || 'System'}]`;
+  const dot = document.createElement('div');
+  dot.className = `activity-dot ${isErr ? 'is-error' : (isWarn ? 'is-warn' : 'is-success')}`;
+
+  const meta = document.createElement('div');
+  meta.className = 'activity-meta';
+
+  const headerLine = document.createElement('div');
+  headerLine.className = 'activity-header-line';
+
+  const sourceBadge = document.createElement('span');
+  sourceBadge.className = `tunnel-level-badge tunnel-level-${level}`;
+  sourceBadge.textContent = source.toUpperCase();
 
   const msgSpan = document.createElement('span');
+  msgSpan.className = 'activity-summary-text';
   msgSpan.textContent = entry.message || '';
 
-  line.appendChild(timeSpan);
-  line.appendChild(tagSpan);
-  line.appendChild(msgSpan);
+  headerLine.appendChild(sourceBadge);
+  headerLine.appendChild(msgSpan);
+  meta.appendChild(headerLine);
 
-  if (entry.detail) {
-    const detailToggle = document.createElement('button');
-    detailToggle.className = 'runtime-detail-toggle';
-    detailToggle.textContent = 'Show details';
+  const timeWrapper = document.createElement('div');
+  timeWrapper.style.display = 'flex';
+  timeWrapper.style.alignItems = 'center';
+  timeWrapper.style.gap = '8px';
 
-    const detailPre = document.createElement('pre');
-    detailPre.className = 'runtime-detail-panel';
-    detailPre.hidden = true;
-    detailPre.textContent = JSON.stringify(entry.detail, null, 2);
+  const timeEl = document.createElement('time');
+  timeEl.className = 'activity-time';
+  timeEl.textContent = time;
+  timeWrapper.appendChild(timeEl);
 
-    detailToggle.addEventListener('click', () => {
-      detailPre.hidden = !detailPre.hidden;
-      detailToggle.textContent = detailPre.hidden ? 'Show details' : 'Hide details';
-    });
+  const chevron = document.createElement('div');
+  chevron.className = 'activity-chevron';
+  chevron.textContent = '▶';
 
-    line.appendChild(detailToggle);
-    line.appendChild(detailPre);
+  summary.appendChild(dot);
+  summary.appendChild(meta);
+  summary.appendChild(timeWrapper);
+  summary.appendChild(chevron);
+
+  // Details panel
+  const panel = document.createElement('div');
+  panel.className = 'activity-details-panel';
+
+  const detailSection = document.createElement('div');
+  const detailLabel = document.createElement('div');
+  detailLabel.style.fontSize = '10px';
+  detailLabel.style.fontWeight = '600';
+  detailLabel.style.color = isErr ? 'var(--red-300)' : 'var(--color-text-tertiary)';
+  detailLabel.style.textTransform = 'uppercase';
+  detailLabel.style.marginBottom = '4px';
+  detailLabel.textContent = 'Runtime Details';
+
+  const detailCode = document.createElement('pre');
+  detailCode.className = 'activity-code-block';
+  detailCode.textContent = entry.detail ? JSON.stringify(entry.detail, null, 2) : (entry.message || '(No extra details)');
+
+  detailSection.appendChild(detailLabel);
+  detailSection.appendChild(detailCode);
+  panel.appendChild(detailSection);
+
+  details.appendChild(summary);
+  details.appendChild(panel);
+
+  if (container.firstChild) {
+    container.insertBefore(details, container.firstChild);
+  } else {
+    container.appendChild(details);
   }
-
-  stream.appendChild(line);
-  stream.scrollTop = stream.scrollHeight;
 }
 
 // Redact sensitive patterns for Safe Log export (tokens, keys, secrets)
@@ -1863,7 +2296,12 @@ async function exportSafeLog() {
       url: redactSafeText(l.url),
       ip: redactSafeText(l.ip)
     })),
-    runtimeLogs: runtimeLogs.map(l => ({
+    tunnelLogs: tunnelLogs.map(l => ({
+      ...l,
+      message: redactSafeText(l.message),
+      detail: l.detail ? safeJsonParse(redactSafeText(JSON.stringify(l.detail)), l.detail) : null
+    })),
+    appRuntimeLogs: runtimeLogs.map(l => ({
       ...l,
       message: redactSafeText(l.message),
       detail: l.detail ? safeJsonParse(redactSafeText(JSON.stringify(l.detail)), l.detail) : null
@@ -1897,7 +2335,18 @@ function clearAllLogs() {
   const clearBtn = document.getElementById('clear-all-logs-btn');
   mcpLogs.length = 0;
   httpLogs.length = 0;
+  tunnelLogs.length = 0;
   runtimeLogs.length = 0;
+
+  const allContainer = document.getElementById('all-table-container');
+  if (allContainer) {
+    allContainer.replaceChildren();
+    const empty = document.createElement('div');
+    empty.className = 'activity-empty';
+    empty.id = 'all-empty-state';
+    empty.textContent = 'Logs cleared. Waiting for new activity...';
+    allContainer.appendChild(empty);
+  }
 
   const tableContainer = document.getElementById('activity-table-container');
   if (tableContainer) {
@@ -1919,16 +2368,29 @@ function clearAllLogs() {
     httpContainer.appendChild(empty);
   }
 
-  const stream = document.getElementById('runtime-log-stream');
-  if (stream) {
-    stream.replaceChildren();
-    const initLine = document.createElement('div');
-    initLine.className = 'log-line';
-    initLine.innerHTML = '<span class="log-tag tag-system">[System]</span><span>Logs cleared.</span>';
-    stream.appendChild(initLine);
+  const tunnelContainer = document.getElementById('tunnel-table-container');
+  if (tunnelContainer) {
+    tunnelContainer.replaceChildren();
+    const empty = document.createElement('div');
+    empty.className = 'activity-empty';
+    empty.id = 'tunnel-empty-state';
+    empty.textContent = 'Tunnel logs cleared.';
+    tunnelContainer.appendChild(empty);
   }
 
+  const runtimeContainer = document.getElementById('runtime-table-container');
+  if (runtimeContainer) {
+    runtimeContainer.replaceChildren();
+    const empty = document.createElement('div');
+    empty.className = 'activity-empty';
+    empty.id = 'runtime-empty-state';
+    empty.textContent = 'App runtime logs cleared.';
+    runtimeContainer.appendChild(empty);
+  }
+
+  updateAllMetrics();
   updateMcpMetrics();
+  updateHttpMetrics();
 
   if (clearBtn) {
     const originalText = clearBtn.textContent;

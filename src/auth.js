@@ -8,6 +8,7 @@ const cors = require('cors');
 const crypto = require('crypto');
 const { v4: uuidv4 } = require('uuid');
 const { EventEmitter } = require('events');
+const { AsyncLocalStorage } = require('async_hooks');
 const configManager = require('./config');
 const { validateSslFiles } = require('./acme-locate');
 
@@ -49,6 +50,7 @@ class AuthGateway extends EventEmitter {
       try { fs.mkdirSync(userDataPath, { recursive: true }); } catch {}
     }
     this.storagePath = path.join(userDataPath, 'aura-tokens.json');
+    this.httpContext = new AsyncLocalStorage();
     this.onLog = null;
     this.loadState();
     this.setupRoutes();
@@ -350,59 +352,43 @@ class AuthGateway extends EventEmitter {
     this.app.use(express.json({ limit: '1mb' }));
     this.app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 
-    // Standard HTTP Inbound Logger
+    // HTTP Inbound Request Context Binder
     this.app.use((req, res, next) => {
       const started = Date.now();
+      const requestId = uuidv4();
+      req.requestId = requestId;
       const rawIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '';
       const ip = (typeof rawIp === 'string' ? rawIp.split(',')[0].trim() : '').replace(/^.*:/, '') || '127.0.0.1';
+
+      const authHeader = req.headers.authorization;
+      const authSummary = authHeader
+        ? (authHeader.startsWith('Bearer ') ? `Bearer ${authHeader.slice(7, 15)}...` : 'Present')
+        : 'None';
+
+      const store = {
+        requestId,
+        method: req.method,
+        url: req.url,
+        ip,
+        auth: authSummary,
+        userAgent: req.headers['user-agent'] || '',
+        started
+      };
 
       res.on('finish', () => {
         const duration = Date.now() - started;
         const status = res.statusCode;
         const isDebug = configManager.get('debugMode') === true;
-        const authHeader = req.headers.authorization;
-        const authSummary = authHeader
-          ? (authHeader.startsWith('Bearer ') ? `Bearer ${authHeader.slice(7, 15)}...` : 'Present')
-          : 'None';
-
         const statusEmoji = status < 400 ? '🌐' : (status < 500 ? '⚠️' : '❌');
-        const summary = `${req.method} ${req.url} -> ${status} (${duration}ms, IP: ${ip})`;
-
-        // Emit structured HTTP log event for the dedicated HTTP Log tab
-        const httpEntry = {
-          timestamp: new Date().toISOString(),
-          method: req.method,
-          url: req.url,
-          status,
-          duration,
-          ip,
-          auth: authSummary,
-          userAgent: req.headers['user-agent'] || '',
-          headers: req.headers
-        };
-        this.emit('http-log', httpEntry);
 
         if (isDebug) {
-          console.log(`${statusEmoji} [HTTP] ${summary} [Auth: ${authSummary}]`);
-          if (typeof this.onLog === 'function') {
-            this.onLog('debug', 'HTTP', `${req.method} ${req.url} -> ${status} (${duration}ms)`, {
-              ip,
-              status,
-              auth: authSummary,
-              userAgent: req.headers['user-agent']
-            });
-          }
-        } else {
-          // In non-debug mode, only log errors/warnings to runtime & console
-          if (status >= 400) {
-            console.warn(`${statusEmoji} [HTTP ${status}] ${req.method} ${req.url} (${duration}ms, IP: ${ip})`);
-            if (typeof this.onLog === 'function') {
-              this.onLog(status >= 500 ? 'error' : 'warn', 'HTTP', `${req.method} ${req.url} failed with status ${status} (${duration}ms)`);
-            }
-          }
+          console.log(`${statusEmoji} [HTTP] ${req.method} ${req.url} -> ${status} (${duration}ms, IP: ${ip})`);
+        } else if (status >= 400) {
+          console.warn(`${statusEmoji} [HTTP ${status}] ${req.method} ${req.url} (${duration}ms, IP: ${ip})`);
         }
       });
-      next();
+
+      this.httpContext.run(store, () => next());
     });
 
     const protectedMetadata = (_req, res) => res.json(this.protectedResourceMetadata());

@@ -3,6 +3,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('api', {
   saveSecret: (secret) => ipcRenderer.invoke('save-secret', secret),
   getConfig: (mode) => ipcRenderer.invoke('get-config', mode),
+  getPiCapabilities: () => ipcRenderer.invoke('get-pi-capabilities'),
   getCfHostnames: (customPath) => ipcRenderer.invoke('get-cf-hostnames', customPath),
   getListenAddresses: () => ipcRenderer.invoke('get-listen-addresses'),
   discoverCfConfigs: () => ipcRenderer.invoke('discover-cf-configs'),
@@ -27,5 +28,6 @@ contextBridge.exposeInMainWorld('api', {
   onServiceStateChanged: (callback) => ipcRenderer.on('service-state-changed', (_event, isConnected) => callback(isConnected)),
   onMcpLog: (callback) => ipcRenderer.on('mcp-log', (_event, logEntry) => callback(logEntry)),
   onHttpLog: (callback) => ipcRenderer.on('http-log', (_event, logEntry) => callback(logEntry)),
+  onTunnelLog: (callback) => ipcRenderer.on('tunnel-log', (_event, logEntry) => callback(logEntry)),
   onRuntimeLog: (callback) => ipcRenderer.on('runtime-log', (_event, logEntry) => callback(logEntry))
 });

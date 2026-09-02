@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
 const crypto = require('crypto');
 const { app } = require('electron');
 
@@ -7,6 +8,14 @@ const PROVIDERS = ['cloudflare-named', 'cloudflare-quick', 'openai', 'custom'];
 const DEFAULT_PROVIDER = 'cloudflare-named';
 const SHELL_POLICIES = ['unrestricted', 'allowlist', 'denylist'];
 const DEFAULT_SHELL_POLICY = 'unrestricted';
+const DEFAULT_MCP_INSTRUCTIONS = [
+  '你已连接 Aura 本地 MCP 能力桥。',
+  '核心工具可直接使用；Pi 的其他工具和 Skills 按需通过 request_capabilities 激活。',
+  '如果用户明确指定某个尚未激活的 Pi tool 或 Skill，先调用 request_capabilities 激活该能力，不要用 execute_shell 或其他工具模拟它。',
+  '需要专用工作流时，根据 request_capabilities 的能力目录选择 Skill；可用 read_skill 读取完整 SKILL.md 及其相对引用文件。',
+  'Pi 工具激活后会通过 MCP tools/list_changed 动态加入当前会话，再直接调用该工具。',
+  'Aura 只直接执行 Pi 工具，不调用 Pi Agent 的 session.prompt()；默认阻止可能调用 Pi 默认模型的能力。'
+].join('\n');
 
 function normalizeShellPolicy(stored) {
   if (stored && typeof stored.shellPolicy === 'string' && SHELL_POLICIES.includes(stored.shellPolicy)) {
@@ -71,6 +80,10 @@ class ConfigManager {
       tunnelMode: DEFAULT_PROVIDER,
       autoConnect: true,
       debugMode: false,
+      mcpInstructions: DEFAULT_MCP_INSTRUCTIONS,
+      piEnabled: false,
+      piTools: [],
+      piAllowModelTools: false,
       fsRoot: '~/',
       shellPolicy: DEFAULT_SHELL_POLICY,
       shellAllowlist: [],
@@ -113,13 +126,27 @@ class ConfigManager {
     if (stored.shellPolicy !== shellPolicy) {
       needsSave = true;
     }
+    if (typeof stored.piAllowModelTools !== 'boolean') {
+      needsSave = true;
+    }
+    if (typeof stored.mcpInstructions !== 'string' || typeof stored.piEnabled !== 'boolean' || !Array.isArray(stored.piTools)) {
+      needsSave = true;
+    }
+
+    const piTools = Array.isArray(stored.piTools)
+      ? [...new Set(stored.piTools.filter(name => typeof name === 'string' && name.trim()).map(name => name.trim()))]
+      : [];
 
     const finalConfig = {
       ...this.defaultConfig,
       ...stored,
       shellPolicy,
       providerConfigs,
-      fsRoot: stored.fsRoot ?? '~/'
+      fsRoot: stored.fsRoot ?? '~/',
+      mcpInstructions: typeof stored.mcpInstructions === 'string' ? stored.mcpInstructions : DEFAULT_MCP_INSTRUCTIONS,
+      piEnabled: stored.piEnabled === true,
+      piTools,
+      piAllowModelTools: stored.piAllowModelTools === true
     };
 
     if (needsSave) {
@@ -241,6 +268,18 @@ class ConfigManager {
     }
     if (typeof payload.debugMode === 'boolean') {
       this.config.debugMode = payload.debugMode;
+    }
+    if (typeof payload.mcpInstructions === 'string') {
+      this.config.mcpInstructions = payload.mcpInstructions;
+    }
+    if (typeof payload.piEnabled === 'boolean') {
+      this.config.piEnabled = payload.piEnabled;
+    }
+    if (Array.isArray(payload.piTools)) {
+      this.config.piTools = [...new Set(payload.piTools.filter(name => typeof name === 'string' && name.trim()).map(name => name.trim()))];
+    }
+    if (typeof payload.piAllowModelTools === 'boolean') {
+      this.config.piAllowModelTools = payload.piAllowModelTools;
     }
     if (typeof payload.fsRoot === 'string') {
       this.config.fsRoot = payload.fsRoot;

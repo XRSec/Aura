@@ -5,6 +5,7 @@ const fs = require('fs');
 const configManager = require('./config');
 const AuthGateway = require('./auth');
 const McpGateway = require('./mcp');
+const { PiBridge } = require('./pi-bridge');
 const TunnelManager = require('./tunnel');
 const { inspectCloudflareConfig, discoverCloudflareConfigs } = require('./cloudflare-config.cjs');
 const { discoverBinaries } = require('./tunnel-locate');
@@ -34,9 +35,9 @@ function emitRuntimeState() {
   }
 }
 
-const recentRuntimeLogs = [];
+const recentAppRuntimeLogs = [];
+const recentTunnelLogs = [];
 const recentMcpLogs = [];
-const recentHttpLogs = [];
 
 function emitLog(channel, logData) {
   if (mainWindow && !mainWindow.isDestroyed()) {
@@ -44,7 +45,7 @@ function emitLog(channel, logData) {
   }
 }
 
-function logRuntime(level, source, message, detail = null) {
+function logAppRuntime(level, message, detail = null) {
   const isDebug = configManager.get('debugMode') === true;
   if (level === 'debug' && !isDebug) {
     return;
@@ -53,13 +54,33 @@ function logRuntime(level, source, message, detail = null) {
   const entry = {
     timestamp: new Date().toISOString(),
     level, // 'info' | 'warn' | 'error' | 'debug'
-    source, // 'Tunnel' | 'Auth' | 'MCP' | 'System' | 'HTTP'
+    source: 'App',
     message,
     detail
   };
-  recentRuntimeLogs.push(entry);
-  if (recentRuntimeLogs.length > 500) recentRuntimeLogs.shift();
+
+  recentAppRuntimeLogs.push(entry);
+  if (recentAppRuntimeLogs.length > 500) recentAppRuntimeLogs.shift();
   emitLog('runtime-log', entry);
+}
+
+function logTunnel(level, message, detail = null) {
+  const isDebug = configManager.get('debugMode') === true;
+  if (level === 'debug' && !isDebug) {
+    return;
+  }
+
+  const entry = {
+    timestamp: new Date().toISOString(),
+    level,
+    source: 'Tunnel',
+    message,
+    detail
+  };
+
+  recentTunnelLogs.push(entry);
+  if (recentTunnelLogs.length > 500) recentTunnelLogs.shift();
+  emitLog('tunnel-log', entry);
 }
 
 async function startServices() {
@@ -74,7 +95,7 @@ async function startServices() {
   runtimeState.tunnel = { status: 'starting', mode, publicUrl: null };
   emitRuntimeState();
 
-  logRuntime('info', 'System', `Initializing local services with tunnel mode: ${mode}...`);
+  logAppRuntime('info', `Initializing local services with tunnel mode: ${mode}...`);
 
   if (!authServer) {
     let sslConfig = null;
@@ -86,36 +107,20 @@ async function startServices() {
     }
 
     authServer = new AuthGateway(providerConfig.listenHost, providerConfig.listenPort, providerConfig.mcpPath, sslConfig);
-    authServer.onLog = (level, source, message, detail) => {
-      logRuntime(level, source, message, detail);
-    };
-    authServer.on('http-log', (logEntry) => {
-      recentHttpLogs.push(logEntry);
-      if (recentHttpLogs.length > 500) recentHttpLogs.shift();
-      emitLog('http-log', logEntry);
-    });
     try {
       await authServer.start();
       const proto = authServer.isHttps ? 'https' : 'http';
       runtimeState.auth = { status: 'ready', protocol: proto };
       emitRuntimeState();
-      logRuntime('info', 'Auth', `Auth Gateway listening on ${proto}://${providerConfig.listenHost}:${providerConfig.listenPort}${providerConfig.mcpPath}${authServer.isHttps ? ' (SSL active)' : ''}`);
+      logAppRuntime('info', `Auth Gateway listening on ${proto}://${providerConfig.listenHost}:${providerConfig.listenPort}${providerConfig.mcpPath}${authServer.isHttps ? ' (SSL active)' : ''}`);
     } catch (err) {
-      logRuntime('error', 'Auth', `Auth Gateway startup error: ${err.message}`);
+      logAppRuntime('error', `Auth Gateway startup error: ${err.message}`);
       console.error('Auth Gateway error:', err);
       if (sslConfig) {
-        logRuntime('warn', 'Auth', 'Retrying Auth Gateway startup in plain HTTP mode...');
+        logAppRuntime('warn', 'Retrying Auth Gateway startup in plain HTTP mode...');
         authServer = new AuthGateway(providerConfig.listenHost, providerConfig.listenPort, providerConfig.mcpPath, null);
-        authServer.onLog = (level, source, message, detail) => {
-          logRuntime(level, source, message, detail);
-        };
-        authServer.on('http-log', (logEntry) => {
-          recentHttpLogs.push(logEntry);
-          if (recentHttpLogs.length > 500) recentHttpLogs.shift();
-          emitLog('http-log', logEntry);
-        });
         await authServer.start();
-        logRuntime('info', 'Auth', `Auth Gateway listening on http://${providerConfig.listenHost}:${providerConfig.listenPort}${providerConfig.mcpPath}`);
+        logAppRuntime('info', `Auth Gateway listening on http://${providerConfig.listenHost}:${providerConfig.listenPort}${providerConfig.mcpPath}`);
       }
     }
 
@@ -126,33 +131,29 @@ async function startServices() {
       if (recentMcpLogs.length > 500) recentMcpLogs.shift();
       emitLog('mcp-log', logEntry);
     });
-    mcpGateway.on('raw-request', (req) => {
-      logRuntime('debug', 'MCP', `Protocol request: ${req.method || 'unknown'}`, req.params);
-    });
 
-    mcpGateway.logConnection('mcp_gateway', 'Ready', { path: providerConfig.mcpPath });
     runtimeState.mcp = {
       status: 'ready',
       endpoint: `${providerConfig.listenHost}:${providerConfig.listenPort}${providerConfig.mcpPath}`
     };
     emitRuntimeState();
-    logRuntime('info', 'MCP', `MCP Gateway ready with core tools at ${providerConfig.mcpPath}`);
+    logAppRuntime('info', `MCP Gateway ready with core tools at ${providerConfig.mcpPath}`);
   }
 
   if (mode === 'cloudflare-quick' || mode === 'cloudflare-named' || mode === 'openai') {
-    logRuntime('info', 'Tunnel', `Starting ${mode} tunnel process on port ${providerConfig.listenPort}...`);
+    logTunnel('info', `Starting ${mode} tunnel process on port ${providerConfig.listenPort}...`);
     tunnelManager = new TunnelManager(mode, providerConfig.listenHost, providerConfig.listenPort);
     tunnelManager.onLog = (level, message) => {
-      logRuntime(level, 'Tunnel', message);
+      logTunnel(level, message);
     };
     tunnelManager.onUrlReady = (url) => {
       runtimeState.tunnel = { status: 'connected', mode, publicUrl: url };
       emitRuntimeState();
-      logRuntime('info', 'Tunnel', `Public endpoint active: ${url}`);
+      logTunnel('info', `Public endpoint active: ${url}`);
       emitLog('url-updated', url);
     };
     await tunnelManager.start().catch(err => {
-      logRuntime('error', 'Tunnel', `Tunnel startup error: ${err.message}`);
+      logTunnel('error', `Tunnel startup error: ${err.message}`);
       console.error('Tunnel error:', err);
     });
   }
@@ -161,11 +162,11 @@ async function startServices() {
   emitRuntimeState();
   isConnected = true;
   emitLog('service-state-changed', true);
-  logRuntime('info', 'System', `All local MCP services running on port ${providerConfig.listenPort}. Ready for AI requests.`);
+  logAppRuntime('info', `All local MCP services running on port ${providerConfig.listenPort}. Ready for AI requests.`);
 }
 
 async function restartServices() {
-  logRuntime('info', 'System', 'Restarting MCP and Tunnel services...');
+  logAppRuntime('info', 'Restarting MCP and Tunnel services...');
   await stopServices();
   await startServices();
 }
@@ -174,13 +175,15 @@ async function stopServices() {
   if (tunnelManager) {
     tunnelManager.stop();
     tunnelManager = null;
-    logRuntime('info', 'Tunnel', 'Tunnel process stopped.');
+    logTunnel('info', 'Tunnel process stopped.');
+  }
+  if (mcpGateway) {
+    await mcpGateway.close();
+    mcpGateway = null;
   }
   if (authServer) {
     await authServer.stop();
     authServer = null;
-    mcpGateway = null;
-    logRuntime('info', 'Auth', 'Auth & MCP servers stopped.');
   }
 
   runtimeState.status = 'stopped';
@@ -190,7 +193,7 @@ async function stopServices() {
   emitRuntimeState();
   isConnected = false;
   emitLog('service-state-changed', false);
-  logRuntime('warn', 'System', 'Local MCP services stopped.');
+  logAppRuntime('info', 'Local MCP services stopped.');
 }
 
 function createWindow() {
@@ -298,6 +301,32 @@ app.on('window-all-closed', function () {
 // IPC handlers for secret storage and config
 ipcMain.handle('get-config', (_event, mode) => {
   return configManager.getEffectiveConfig(mode || configManager.get('tunnelMode'));
+});
+
+ipcMain.handle('get-pi-capabilities', async () => {
+  const bridge = new PiBridge({
+    getFsRoot: () => configManager.get('fsRoot') || '~/'
+  });
+  try {
+    await bridge.initialize();
+    if (!bridge.available) {
+      return { available: false, version: null, tools: [], error: bridge.initError?.message || 'Pi is unavailable.' };
+    }
+    return {
+      available: true,
+      version: bridge.version,
+      tools: bridge.listTools().map(tool => ({
+        name: tool.name,
+        description: tool.description || '',
+        category: tool.category,
+        usesPiDefaultModel: tool.usesPiDefaultModel === true,
+        source: tool.sourceInfo?.source || tool.sourceInfo?.path || 'pi'
+      })),
+      error: null
+    };
+  } finally {
+    bridge.dispose();
+  }
 });
 
 ipcMain.handle('pick-cf-config', async () => {
@@ -421,9 +450,9 @@ ipcMain.handle('get-tokens', () => {
 
 ipcMain.handle('get-recent-logs', () => {
   return {
-    runtimeLogs: recentRuntimeLogs,
-    mcpLogs: recentMcpLogs,
-    httpLogs: recentHttpLogs
+    appRuntimeLogs: recentAppRuntimeLogs,
+    tunnelLogs: recentTunnelLogs,
+    mcpLogs: recentMcpLogs
   };
 });
 

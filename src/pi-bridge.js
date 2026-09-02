@@ -15,7 +15,6 @@ const AURA_OWNED_TOOLS = new Set([
   'read',
   'bash',
   'powershell',
-  'edit',
   'write',
   'grep',
   'find',
@@ -311,6 +310,35 @@ class PiBridge {
     return path.resolve(expandHome(this.getFsRoot() || '~/'));
   }
 
+  resolveToolPathWithinRoot(targetPath) {
+    const root = fs.realpathSync(this.resolvedFsRoot());
+    const raw = String(targetPath || '').trim();
+    if (!raw) throw new Error('Tool path is required.');
+
+    const resolved = path.isAbsolute(raw)
+      ? path.resolve(raw)
+      : path.resolve(root, raw);
+
+    if (!isWithin(root, resolved)) {
+      throw new Error('Access denied: Pi tool path is outside the configured Aura filesystem root.');
+    }
+
+    if (fs.existsSync(resolved)) {
+      const realTarget = fs.realpathSync(resolved);
+      if (!isWithin(root, realTarget)) {
+        throw new Error('Access denied: Pi tool path resolves outside the configured Aura filesystem root.');
+      }
+    }
+
+    return resolved;
+  }
+
+  validateToolAuthority(name, args) {
+    if (name === 'edit') {
+      this.resolveToolPathWithinRoot(args?.path);
+    }
+  }
+
   async initialize() {
     if (this.available || this.session) return this;
 
@@ -396,19 +424,20 @@ class PiBridge {
     return Array.from(this.skills.values()).sort((a, b) => a.name.localeCompare(b.name));
   }
 
-  catalogText({ maxDescription = 150 } = {}) {
+  catalogText({ maxDescription = 150, toolNames = null, includeSkills = true } = {}) {
     if (!this.available) {
       return `Pi bridge unavailable: ${this.initError?.message || 'Pi is not installed.'}`;
     }
 
-    const toolLines = this.listTools().map(tool => {
+    const allowedToolNames = Array.isArray(toolNames) ? new Set(toolNames) : null;
+    const toolLines = this.listTools().filter(tool => !allowedToolNames || allowedToolNames.has(tool.name)).map(tool => {
       const flags = [tool.category];
       if (tool.usesPiDefaultModel) flags.push(this.getAllowPiModelTools() ? 'model-enabled' : 'blocked-by-default');
       return `- tool ${tool.name} [${flags.join(', ')}]: ${oneLine(tool.description, maxDescription) || 'No description provided.'}`;
     });
-    const skillLines = this.listSkills().map(skill =>
+    const skillLines = includeSkills ? this.listSkills().map(skill =>
       `- skill ${skill.name}: ${oneLine(skill.description, maxDescription) || 'No description provided.'}`
-    );
+    ) : [];
 
     return [
       `Pi ${this.version} capabilities. Tools are inactive until request_capabilities enables them.`,
@@ -418,17 +447,22 @@ class PiBridge {
     ].join('\n');
   }
 
-  enableTools(requestedNames = []) {
+  enableTools(requestedNames = [], allowedNames = null) {
     const result = { enabled: [], alreadyActive: [], blocked: [], unknown: [] };
     if (!this.available || !this.session) {
       for (const name of requestedNames) result.unknown.push(String(name));
       return result;
     }
 
+    const allowed = Array.isArray(allowedNames) ? new Set(allowedNames) : null;
     for (const rawName of requestedNames) {
       const name = String(rawName || '').trim();
       if (!name || !this.tools.has(name)) {
         result.unknown.push(name || String(rawName));
+        continue;
+      }
+      if (allowed && !allowed.has(name)) {
+        result.blocked.push({ name, reason: 'Not enabled in Aura Pi tool settings.' });
         continue;
       }
       const tool = this.tools.get(name);
@@ -515,6 +549,7 @@ class PiBridge {
     const tool = this.session.state.tools.find(candidate => candidate.name === name);
     if (!tool) throw new Error(`Pi tool '${name}' is not present in the active Pi tool set.`);
 
+    this.validateToolAuthority(name, args);
     const result = await tool.execute(randomUUID(), args, signal, onUpdate);
     return {
       content: Array.isArray(result?.content) ? result.content : [{ type: 'text', text: String(result ?? '') }],
