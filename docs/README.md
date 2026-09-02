@@ -1,22 +1,37 @@
-# Aura MCP Connector
+<div align="center">
+  <img src="screenshots/Aura.png" alt="Aura" width="120" />
+  <h1>Aura</h1>
+  <p>
+    <strong>Securely connect AI to your local machine through MCP.</strong><br />
+    通过 MCP，让 AI 安全连接你的本地电脑。
+  </p>
+</div>
 
-Aura is a desktop MCP (Model Context Protocol) bridge for AI assistants. It runs a local MCP server, exposes safe file/shell capabilities, and exposes additional capabilities through Pi (optional).
+## 中文
 
-Aura is built on Electron and is designed to work with clients like ChatGPT, Claude, and other MCP-compatible tools.
+**Aura 是一款让 AI 安全连接本地电脑的桌面 MCP Bridge。**  
+它在你的电脑上运行本地 MCP Server，将文件读写、终端命令、Skills 以及可选的 Pi Tools，通过受控的 MCP 接口提供给 ChatGPT、Claude 和其他支持 MCP 的 AI 客户端。
 
-![Aura Logo](screenshots/Aura.png)
+Aura 将本地能力、安全策略、Token 授权、文件系统沙箱、Shell 权限控制、运行日志和远程连接整合在一个桌面应用中，并支持 Cloudflare Tunnel、OpenAI Secure MCP Tunnel 以及自定义反向代理，让你无需自己拼装复杂的 MCP、授权和 Tunnel 基础设施，就能把自己的电脑变成一个可由 AI 安全调用的本地能力节点。
 
-## Screenshots
+## English
+
+**Aura is a desktop MCP bridge that securely connects AI assistants to your local computer.**  
+It runs a local MCP server and gives ChatGPT, Claude, and other MCP-compatible clients controlled access to capabilities such as file operations, shell commands, Skills, and optional Pi Tools.
+
+Aura brings local capabilities, security policies, token authorization, filesystem sandboxing, shell access control, runtime logs, and remote connectivity into a single desktop application. With support for Cloudflare Tunnel, OpenAI Secure MCP Tunnel, and custom reverse proxies, Aura removes the need to manually assemble MCP servers, authorization, and tunneling infrastructure—turning your computer into a secure local capability node for AI.
+
+## Screenshots / 截图
 
 - ![连接器配置](screenshots/连接器配置.png)
 - ![连接指南](screenshots/连接指南.png)
 - ![MCP 指令与能力](screenshots/活动与诊断日志%20MCP%20细节.png)
-- ![活动与诊断日志 MCP 细节](docs/screenshots/%E6%B4%BB%E5%8A%A8%E4%B8%8E%E8%AF%8A%E6%96%AD%E5%BF%97%20MCP%20%E7%BB%86%E8%8A%82.png)
+- ![活动与诊断日志 MCP 细节](screenshots/%E6%B4%BB%E5%8A%A8%E4%B8%8E%E8%AF%8A%E6%96%AD%E5%BF%97%20MCP%20%E7%BB%86%E8%8A%82.png)
 - ![活动与诊断日志 HTTP 细节](screenshots/活动与诊断日志%20HTTP%20细节.png)
 - ![使用 PI 能力](screenshots/使用%20PI%20能力.png)
-- ![活动与诊断日志](docs/screenshots/%E6%B4%BB%E5%8A%A8%E4%B8%8E%E8%AF%8A%E6%96%AD%E5%BF%97.png)
+- ![活动与诊断日志](screenshots/%E6%B4%BB%E5%8A%A8%E4%B8%8E%E8%AF%8A%E6%96%AD%E5%BF%97.png)
 
-## What this app provides
+## Features / 核心能力
 
 - MCP HTTP server with secure token-based auth for AI client access.
 - Multiple connectivity paths so you can expose MCP over:
