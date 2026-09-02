@@ -10,6 +10,7 @@ const TunnelManager = require('./tunnel');
 const { inspectCloudflareConfig, discoverCloudflareConfigs } = require('./cloudflare-config.cjs');
 const { discoverBinaries } = require('./tunnel-locate');
 const { discoverAcmeCertificates, validateSslFiles } = require('./acme-locate');
+const packageMetadata = require('../package.json');
 
 let authServer;
 let mcpGateway;
@@ -38,6 +39,52 @@ function emitRuntimeState() {
 const recentAppRuntimeLogs = [];
 const recentTunnelLogs = [];
 const recentMcpLogs = [];
+
+function loadAndPruneOldLogs() {
+  try {
+    const userDataPath = (app && typeof app.getPath === 'function')
+      ? app.getPath('userData')
+      : path.join(os.homedir(), '.aura');
+    const logsPath = path.join(userDataPath, 'aura-logs.json');
+    const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000; // 7 days retention
+
+    if (fs.existsSync(logsPath)) {
+      const raw = fs.readFileSync(logsPath, 'utf8');
+      const data = JSON.parse(raw);
+
+      const prune = (arr) => Array.isArray(arr)
+        ? arr.filter(item => {
+            const t = item.timestamp ? new Date(item.timestamp).getTime() : 0;
+            return t >= cutoff;
+          }).slice(-500)
+        : [];
+
+      if (Array.isArray(data.mcpLogs)) recentMcpLogs.push(...prune(data.mcpLogs));
+      if (Array.isArray(data.tunnelLogs)) recentTunnelLogs.push(...prune(data.tunnelLogs));
+      if (Array.isArray(data.appRuntimeLogs)) recentAppRuntimeLogs.push(...prune(data.appRuntimeLogs));
+    }
+  } catch (err) {
+    console.error('Failed to load/prune aura logs:', err);
+  }
+}
+
+function savePersistedLogs() {
+  try {
+    const userDataPath = (app && typeof app.getPath === 'function')
+      ? app.getPath('userData')
+      : path.join(os.homedir(), '.aura');
+    const logsPath = path.join(userDataPath, 'aura-logs.json');
+    const data = {
+      savedAt: new Date().toISOString(),
+      mcpLogs: recentMcpLogs.slice(-500),
+      tunnelLogs: recentTunnelLogs.slice(-500),
+      appRuntimeLogs: recentAppRuntimeLogs.slice(-500)
+    };
+    fs.writeFileSync(logsPath, JSON.stringify(data, null, 2), 'utf8');
+  } catch (err) {
+    console.error('Failed to save logs to disk:', err);
+  }
+}
 
 function emitLog(channel, logData) {
   if (mainWindow && !mainWindow.isDestroyed()) {
@@ -107,6 +154,11 @@ async function startServices() {
     }
 
     authServer = new AuthGateway(providerConfig.listenHost, providerConfig.listenPort, providerConfig.mcpPath, sslConfig);
+    authServer.on('http-request-log', (logEntry) => {
+      recentMcpLogs.push(logEntry);
+      if (recentMcpLogs.length > 500) recentMcpLogs.shift();
+      emitLog('mcp-log', logEntry);
+    });
     try {
       await authServer.start();
       const proto = authServer.isHttps ? 'https' : 'http';
@@ -119,6 +171,11 @@ async function startServices() {
       if (sslConfig) {
         logAppRuntime('warn', 'Retrying Auth Gateway startup in plain HTTP mode...');
         authServer = new AuthGateway(providerConfig.listenHost, providerConfig.listenPort, providerConfig.mcpPath, null);
+        authServer.on('http-request-log', (logEntry) => {
+          recentMcpLogs.push(logEntry);
+          if (recentMcpLogs.length > 500) recentMcpLogs.shift();
+          emitLog('mcp-log', logEntry);
+        });
         await authServer.start();
         logAppRuntime('info', `Auth Gateway listening on http://${providerConfig.listenHost}:${providerConfig.listenPort}${providerConfig.mcpPath}`);
       }
@@ -196,6 +253,66 @@ async function stopServices() {
   logAppRuntime('info', 'Local MCP services stopped.');
 }
 
+function closeMainWindow() {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.hide();
+  }
+}
+
+function setupApplicationMenu() {
+  if (process.platform !== 'darwin') return;
+
+  const githubUrl = packageMetadata.homepage || 'https://github.com/XRSec/Aura';
+  app.setAboutPanelOptions({
+    applicationName: app.getName(),
+    applicationVersion: app.getVersion(),
+    website: githubUrl,
+    websiteLabel: 'GitHub'
+  });
+
+  const menu = Menu.buildFromTemplate([
+    {
+      label: app.name,
+      submenu: [
+        { label: `About ${app.name}`, click: () => app.showAboutPanel() },
+        { type: 'separator' },
+        {
+          label: 'Close Window',
+          accelerator: 'CmdOrCtrl+W',
+          click: closeMainWindow
+        },
+        { type: 'separator' },
+        { role: 'quit', label: `Quit ${app.name}` }
+      ]
+    },
+    {
+      label: 'Edit',
+      submenu: [
+        { role: 'undo' },
+        { role: 'redo' },
+        { type: 'separator' },
+        { role: 'cut' },
+        { role: 'copy' },
+        { role: 'paste' },
+        { type: 'separator' },
+        { role: 'selectAll' }
+      ]
+    },
+    {
+      label: 'View',
+      submenu: [
+        { role: 'reload', label: 'Reload' },
+        { role: 'forceReload', label: 'Force Reload' },
+        { role: 'toggleDevTools', label: 'Toggle Developer Tools' },
+        { type: 'separator' },
+        { role: 'togglefullscreen', label: 'Toggle Full Screen' }
+      ]
+    }
+  ]);
+
+  Menu.setApplicationMenu(menu);
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 900,
@@ -214,6 +331,13 @@ function createWindow() {
     }
   });
 
+  mainWindow.on('close', (event) => {
+    if (process.platform === 'darwin' && !app.isQuitting) {
+      event.preventDefault();
+      mainWindow.hide();
+    }
+  });
+
   // Console forwarding (for debugging):
   // mainWindow.webContents.on('console-message', (_event, _level, message, line) => {
   //   console.log(`[Renderer L${line}] ${message}`);
@@ -223,15 +347,17 @@ function createWindow() {
 }
 
 app.whenReady().then(async () => {
+  loadAndPruneOldLogs();
+  setupApplicationMenu();
   createWindow();
 
-  logRuntime('info', 'System', 'Aura application initialized.');
+  logAppRuntime('info', 'Aura application initialized.');
 
   const autoConnect = configManager.get('autoConnect') !== false;
   if (autoConnect) {
     await startServices();
   } else {
-    logRuntime('info', 'System', 'Auto-connect disabled. Click Connect to start MCP services.');
+    logAppRuntime('info', 'Auto-connect disabled. Click Connect to start MCP services.');
   }
 
   // Create System Tray
@@ -253,6 +379,19 @@ app.whenReady().then(async () => {
         }
       }
     },
+    {
+      label: 'Reload',
+      click: () => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.reload();
+        }
+      }
+    },
+    { type: 'separator' },
+    {
+      label: 'Close Window',
+      click: closeMainWindow
+    },
     { label: 'Quit', click: () => { app.quit(); } }
   ]);
   tray.setToolTip('Aura MCP Connector');
@@ -268,15 +407,6 @@ app.whenReady().then(async () => {
       createWindow();
     }
   });
-  
-  // Hide to tray instead of quitting on window close
-  mainWindow.on('close', (event) => {
-    if (!app.isQuitting) {
-      event.preventDefault();
-      mainWindow.hide();
-    }
-    return false;
-  });
 
   app.on('activate', function () {
     if (mainWindow && !mainWindow.isDestroyed()) {
@@ -290,12 +420,21 @@ app.whenReady().then(async () => {
 
 app.on('before-quit', () => {
   app.isQuitting = true;
+  savePersistedLogs();
+  if (tunnelManager) {
+    tunnelManager.stop();
+    tunnelManager = null;
+  }
+  if (authServer) {
+    authServer.stop();
+    authServer = null;
+  }
 });
 
-app.on('window-all-closed', function () {
-  if (tunnelManager) tunnelManager.stop();
-  if (authServer) authServer.stop();
-  if (process.platform !== 'darwin') app.quit();
+app.on('window-all-closed', () => {
+  if (process.platform !== 'darwin') {
+    app.quit();
+  }
 });
 
 // IPC handlers for secret storage and config
@@ -320,7 +459,12 @@ ipcMain.handle('get-pi-capabilities', async () => {
         description: tool.description || '',
         category: tool.category,
         usesPiDefaultModel: tool.usesPiDefaultModel === true,
-        source: tool.sourceInfo?.source || tool.sourceInfo?.path || 'pi'
+        sourceInfo: tool.sourceInfo ? {
+          source: tool.sourceInfo.source || '',
+          path: tool.sourceInfo.path || '',
+          scope: tool.sourceInfo.scope || '',
+          origin: tool.sourceInfo.origin || ''
+        } : null
       })),
       error: null
     };
@@ -374,7 +518,7 @@ ipcMain.handle('get-listen-addresses', () => {
 ipcMain.handle('save-config', async (_event, newConfig) => {
   const mode = newConfig?.tunnelMode || configManager.get('tunnelMode');
   const result = configManager.saveNetworkConfig(mode, newConfig || {});
-  logRuntime('info', 'System', `Configuration saved for mode: ${mode}`, {
+  logAppRuntime('info', `Configuration saved for mode: ${mode}`, {
     tunnelMode: result.tunnelMode,
     mcpUrl: result.mcpUrl,
     listenPort: result.listenPort,
@@ -454,6 +598,14 @@ ipcMain.handle('get-recent-logs', () => {
     tunnelLogs: recentTunnelLogs,
     mcpLogs: recentMcpLogs
   };
+});
+
+ipcMain.handle('clear-recent-logs', () => {
+  recentMcpLogs.length = 0;
+  recentTunnelLogs.length = 0;
+  recentAppRuntimeLogs.length = 0;
+  savePersistedLogs();
+  return { ok: true };
 });
 
 ipcMain.handle('revoke-token', (_event, token) => {

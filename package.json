@@ -11,13 +11,16 @@
   "homepage": "https://github.com/XRSec/Aura",
   "scripts": {
     "start": "electron .",
-    "pack": "electron-builder --dir",
+    "pack": "CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --dir -c.mac.identity=null",
     "dist": "electron-builder",
     "dist:mac": "electron-builder --mac",
     "dist:win": "electron-builder --win",
     "dist:linux": "electron-builder --linux"
   },
   "build": {
+    "asarUnpack": [
+      "src/pi-worker.cjs"
+    ],
     "appId": "fun.xrsec.aura",
     "productName": "Aura",
     "directories": {
@@ -30,6 +33,7 @@
       "repo": "Aura"
     },
     "mac": {
+      "identity": null,
       "category": "public.app-category.developer-tools",
       "icon": "build/icon.icns",
       "target": [
@@ -103,7 +107,7 @@
     "zod": "^4.5.4"
   },
   "devDependencies": {
-    "electron": "^34.2.0",
+    "electron": "44.1.1",
     "electron-builder": "^26.15.3"
   }
 }

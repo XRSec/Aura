@@ -13,6 +13,7 @@ contextBridge.exposeInMainWorld('api', {
   saveProviderConfig: (mode, cfg) => ipcRenderer.invoke('save-provider-config', mode, cfg),
   getTokens: () => ipcRenderer.invoke('get-tokens'),
   getRecentLogs: () => ipcRenderer.invoke('get-recent-logs'),
+  clearLogs: () => ipcRenderer.invoke('clear-recent-logs'),
   revokeToken: (token) => ipcRenderer.invoke('revoke-token', token),
   restartTunnel: (mode) => ipcRenderer.invoke('restart-tunnel', mode),
   openExternal: (url) => ipcRenderer.invoke('open-external', url),
@@ -27,7 +28,6 @@ contextBridge.exposeInMainWorld('api', {
   onUrlUpdated: (callback) => ipcRenderer.on('url-updated', (_event, url) => callback(url)),
   onServiceStateChanged: (callback) => ipcRenderer.on('service-state-changed', (_event, isConnected) => callback(isConnected)),
   onMcpLog: (callback) => ipcRenderer.on('mcp-log', (_event, logEntry) => callback(logEntry)),
-  onHttpLog: (callback) => ipcRenderer.on('http-log', (_event, logEntry) => callback(logEntry)),
   onTunnelLog: (callback) => ipcRenderer.on('tunnel-log', (_event, logEntry) => callback(logEntry)),
   onRuntimeLog: (callback) => ipcRenderer.on('runtime-log', (_event, logEntry) => callback(logEntry))
 });

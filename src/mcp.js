@@ -30,11 +30,22 @@ class McpGateway extends EventEmitter {
     const piBridge = new PiBridge({
       getFsRoot: () => configManager.get('fsRoot') || '~/',
       getAllowPiModelTools: () => configManager.get('piAllowModelTools') === true,
+      getShellPolicy: () => configManager.get('shellPolicy') || 'unrestricted',
+      getShellAllowlist: () => configManager.get('shellAllowlist') || [],
+      getShellDenylist: () => configManager.get('shellDenylist') || [],
       onStatus: (level, message, detail) => {
         this.logConnection('pi_bridge', level === 'warn' ? 'Warning' : 'Ready', { message, detail });
       }
     });
-    if (piEnabled) await piBridge.initialize();
+    if (piEnabled) {
+      await piBridge.initialize();
+      if (piBridge.available) {
+        const configuredPiTools = Array.isArray(configManager.get('piTools')) ? configManager.get('piTools') : [];
+        if (configuredPiTools.length > 0) {
+          await piBridge.enableTools(configuredPiTools, configuredPiTools);
+        }
+      }
+    }
 
     const configuredInstructions = configManager.get('mcpInstructions');
     const server = new McpServer(
@@ -51,15 +62,30 @@ class McpGateway extends EventEmitter {
   }
 
   logExecution(tool, params, result) {
+    const isDebug = configManager.get('debugMode') === true;
     const httpCtx = this.authServer?.httpContext?.getStore();
-    const httpInfo = httpCtx ? {
-      method: httpCtx.method,
-      url: httpCtx.url,
-      ip: httpCtx.ip,
-      auth: httpCtx.auth,
-      requestId: httpCtx.requestId,
-      elapsedMs: Date.now() - (httpCtx.started || Date.now())
-    } : null;
+    if (httpCtx) {
+      httpCtx.hasToolCall = true;
+    }
+
+    let httpInfo = null;
+    if (httpCtx) {
+      httpInfo = {
+        method: httpCtx.method,
+        url: httpCtx.url,
+        ip: httpCtx.ip,
+        auth: httpCtx.auth,
+        requestId: httpCtx.requestId,
+        elapsedMs: Date.now() - (httpCtx.started || Date.now())
+      };
+      if (isDebug) {
+        httpInfo.headers = httpCtx.headers;
+        httpInfo.userAgent = httpCtx.userAgent;
+        if (httpCtx.query && Object.keys(httpCtx.query).length > 0) {
+          httpInfo.query = httpCtx.query;
+        }
+      }
+    }
 
     this.emit("execution-log", {
       timestamp: new Date().toISOString(),
@@ -73,7 +99,7 @@ class McpGateway extends EventEmitter {
     });
   }
 
-  logConnection(event, result, params = {}) {
+  logConnection(_event, _result, _params = {}) {
     // Connection lifecycle events are internal runtime state, not AI tool invocations.
     // They are not added to MCP Tools log.
   }
@@ -107,7 +133,10 @@ class McpGateway extends EventEmitter {
   }
 
   setupToolsForServer(server, piBridge, { piEnabled = false } = {}) {
-    const piToolHandles = new Map();
+    const defaultCapabilitiesEnabled = configManager.get('defaultCapabilitiesEnabled') !== false;
+    const configuredDefaultTools = Array.isArray(configManager.get('defaultTools')) ? configManager.get('defaultTools') : [];
+    const configuredDefaultToolNames = new Set(configuredDefaultTools);
+    const defaultToolEnabled = name => defaultCapabilitiesEnabled && configuredDefaultToolNames.has(name);
     const configuredPiTools = Array.isArray(configManager.get('piTools')) ? configManager.get('piTools') : [];
     const configuredPiToolNames = new Set(configuredPiTools);
     const exposedPiTools = piEnabled && piBridge.available
@@ -119,6 +148,7 @@ class McpGateway extends EventEmitter {
       ? piBridge.listSkills().map(skill => `- ${skill.name}: ${skill.description || 'No description provided.'}`).join('\n')
       : this.skillRegistry.catalogText();
 
+    if (defaultToolEnabled('list_skills')) {
     server.tool(
       "list_skills",
       "List reusable Skills. When Pi is installed, Aura reads the exact Skill registry discovered by Pi's ResourceLoader; otherwise Aura falls back to local Skill discovery.",
@@ -154,6 +184,9 @@ class McpGateway extends EventEmitter {
       }
     );
 
+    }
+
+    if (defaultToolEnabled('read_skill')) {
     server.tool(
       "read_skill",
       `Read a Skill's SKILL.md or another text file relative to that Skill directory. When Pi is available, this reads the Skill selected by Pi's own ResourceLoader. If SKILL.md references a relative file, call read_skill again with the same skill and that relative path.\n\nAvailable Skills:\n${piSkillCatalog || '(No Skills discovered.)'}`,
@@ -189,8 +222,11 @@ class McpGateway extends EventEmitter {
       }
     );
 
+    }
+
+    if (piEnabled) {
     const capabilityDescription = usePiResources
-      ? `Enable only the Pi tools selected in Aura Settings or load Pi Skills when needed. If the user explicitly names an inactive selected Pi capability, activate that capability here instead of emulating it with execute_shell or another tool. Tool schemas are added to this MCP session after activation. Aura invokes Pi tool execute() directly and never calls Pi session.prompt().\n\nInactive capabilities:\n${piBridge.catalogText({ toolNames: exposedPiToolNames })}`
+      ? `Load Pi Skills on demand. Pi tools selected in Aura Settings are already exposed and enabled when the MCP session connects, so call those tools directly. Aura invokes Pi tool execute() directly and never calls Pi session.prompt().`
       : `Pi capabilities are disabled in Aura Settings. Core Aura tools and locally discovered Skills remain usable.`;
 
     server.registerTool(
@@ -198,34 +234,23 @@ class McpGateway extends EventEmitter {
       {
         description: capabilityDescription,
         inputSchema: z.object({
-          tools: z.array(z.string()).max(16).optional().describe('Pi tool names to enable in this MCP session'),
-          skills: z.array(z.string()).max(16).optional().describe('Pi Skill names to load into the current context'),
-          reason: z.string().min(1).optional().describe('Why these capabilities are needed')
-        }).refine(value => (value.tools?.length || 0) + (value.skills?.length || 0) > 0, {
-          message: 'Request at least one tool or Skill.'
+          skills: z.array(z.string()).min(1).max(16).describe('Pi Skill names to load into the current context'),
+          reason: z.string().min(1).optional().describe('Why these Skills are needed')
         })
       },
-      async ({ tools = [], skills = [], reason = '' }) => {
+      async ({ skills, reason = '' }) => {
         const startedAt = Date.now();
         try {
+          if (!piEnabled) {
+            throw new Error('Pi capabilities are disabled in Aura Settings.');
+          }
           if (!piBridge.available) {
             throw new Error(piBridge.initError?.message || 'Pi bridge is unavailable.');
           }
 
-          const toolActivation = piBridge.enableTools(tools, exposedPiToolNames);
-          for (const name of [...toolActivation.enabled, ...toolActivation.alreadyActive]) {
-            piToolHandles.get(name)?.enable();
-          }
           const skillActivation = piBridge.activateSkills(skills);
-
           const lines = [];
           if (reason) lines.push(`Reason: ${reason}`);
-          if (toolActivation.enabled.length) lines.push(`Enabled Pi tools: ${toolActivation.enabled.join(', ')}`);
-          if (toolActivation.alreadyActive.length) lines.push(`Already active: ${toolActivation.alreadyActive.join(', ')}`);
-          if (toolActivation.blocked.length) {
-            lines.push(`Blocked: ${toolActivation.blocked.map(item => `${item.name} (${item.reason})`).join('; ')}`);
-          }
-          if (toolActivation.unknown.length) lines.push(`Unknown tools: ${toolActivation.unknown.join(', ')}`);
           if (skillActivation.unknown.length) lines.push(`Unknown Skills: ${skillActivation.unknown.join(', ')}`);
 
           for (const skill of skillActivation.activated) {
@@ -235,27 +260,29 @@ class McpGateway extends EventEmitter {
               lines.push('', skill.content);
             }
           }
-          if (!lines.length) lines.push('No capability changes were required.');
+          if (!lines.length) lines.push('No Skills were loaded.');
 
           const duration = Date.now() - startedAt;
-          this.logExecution("request_capabilities", { tools, skills, reason }, {
+          this.logExecution("request_capabilities", { skills, reason }, {
             isError: false,
-            output: `Enabled ${toolActivation.enabled.length} tools; loaded ${skillActivation.activated.filter(item => !item.skipped).length} Skills`,
+            output: `Loaded ${skillActivation.activated.filter(item => !item.skipped).length} Skills`,
             duration
           });
           return { content: [{ type: 'text', text: lines.join('\n') }] };
         } catch (err) {
           const duration = Date.now() - startedAt;
-          this.logExecution("request_capabilities", { tools, skills, reason }, { isError: true, error: err.message, duration });
+          this.logExecution("request_capabilities", { skills, reason }, { isError: true, error: err.message, duration });
           return { content: [{ type: 'text', text: `Error: ${err.message}` }], isError: true };
         }
       }
     );
 
+    }
+
     if (usePiResources) {
       for (const piTool of exposedPiTools) {
         try {
-          const registered = server.registerTool(
+          server.registerTool(
             piTool.name,
             {
               description: `${piTool.description || 'Pi tool.'}\n\nSource: Pi ${piBridge.version}${piTool.usesPiDefaultModel ? ' · May invoke the Pi default model.' : ' · Direct tool execution; no Pi agent turn.'}`,
@@ -285,14 +312,13 @@ class McpGateway extends EventEmitter {
               }
             }
           );
-          registered.disable();
-          piToolHandles.set(piTool.name, registered);
         } catch (error) {
           this.logConnection('pi_tool_register', 'Skipped', { tool: piTool.name, error: error.message });
         }
       }
     }
 
+    if (defaultToolEnabled('read_file')) {
     // 1. FileSystem: Read
     server.tool("read_file",
       { path: z.string().describe("Relative path to the file to read") },
@@ -312,6 +338,9 @@ class McpGateway extends EventEmitter {
       }
     );
 
+    }
+
+    if (defaultToolEnabled('write_file')) {
     // 2. FileSystem: Write
     server.tool("write_file",
       {
@@ -335,9 +364,12 @@ class McpGateway extends EventEmitter {
       }
     );
 
+    }
+
+    if (defaultToolEnabled('execute_shell')) {
     // 3. Shell Execution (Unrestricted/Allow/Deny)
     server.tool("execute_shell",
-      "Execute a shell command under Aura's shell policy. Do not use shell to emulate a Pi capability explicitly requested by the user; activate the named capability with request_capabilities first.",
+      "Execute a shell command under Aura's shell policy. If a selected Pi tool already provides the requested capability, call that dedicated tool directly instead of emulating it with shell.",
       { command: z.string().describe("Shell command to execute") },
       async ({ command }) => {
         const startedAt = Date.now();
@@ -378,6 +410,7 @@ class McpGateway extends EventEmitter {
         });
       }
     );
+    }
   }
 
   setupRoutes() {
@@ -411,7 +444,7 @@ class McpGateway extends EventEmitter {
           const { server: mcpServer, piBridge } = await this.createMcpServerInstance();
           const transport = new StreamableHTTPServerTransport({
             sessionIdGenerator: () => randomUUID(),
-            enableJsonResponse: true,
+            enableJsonResponse: false,
             onsessioninitialized: id => {
               sessions.set(id, { transport, server: mcpServer, piBridge });
               this.logConnection('mcp_connect', 'Connected', { sessionId: id, path: streamablePath });

@@ -11,47 +11,279 @@ const shellPolicyLabels = {
   'denylist': 'Denylist enforced'
 };
 
+const ZH_TRANSLATIONS = {
+  'Settings': '设置',
+  'Logs': '日志',
+  'Stopped': '已停止',
+  'Running': '运行中',
+  'Connect': '连接',
+  'Disconnect': '断开连接',
+  'Connector Configuration': '连接器配置',
+  'Configure local tools, network tunnels, and authorization credentials for AI assistants.': '配置 AI 助手使用的本地工具、网络隧道和授权凭据。',
+  'General': '常规',
+  'Auto Connect': '自动连接',
+  'Automatically start server & tunnel on app launch': '应用启动时自动启动服务器和隧道',
+  'Debug Mode': '调试模式',
+  'Enable verbose logging and diagnostic protocol output': '启用详细日志和诊断协议输出',
+  'Language': '语言',
+  'Appearance': '外观',
+  'Dark': '深色',
+  'Light': '浅色',
+  'Network & Tunnel': '网络与隧道',
+  'Tunnel Mode': '隧道模式',
+  'Recommended': '推荐',
+  'Random URL': '随机 URL',
+  'Private Ingress': '私有入口',
+  'BYO Proxy': '自定义代理',
+  'MCP Listen Address': 'MCP 监听地址',
+  'MCP Listen Port': 'MCP 监听端口',
+  'Tunnel Binary': '隧道程序',
+  'Browse…': '浏览…',
+  'Tunnel ID': '隧道 ID',
+  'Tunnel API Key': '隧道 API Key',
+  'Show': '显示',
+  'Hide': '隐藏',
+  'Config File': '配置文件',
+  'SSL Certificate': 'SSL 证书',
+  'SSL Private Key': 'SSL 私钥',
+  'MCP Endpoint URL': 'MCP 端点 URL',
+  'Tunnel Setup': '隧道设置',
+  'Requires Cloudflare config in Named/Quick tunnel mode.': 'Named/Quick 隧道模式需要 Cloudflare 配置。',
+  'Open setup docs': '打开设置文档',
+  'Save': '保存',
+  'Saved ✓': '已保存 ✓',
+  'Debug mode enabled (verbose logging)': '调试模式已启用（详细日志）',
+  'Debug mode disabled': '调试模式已关闭',
+  'No active tokens': '暂无活跃令牌',
+  'Tokens will appear here after an MCP client completes authorization.': 'MCP 客户端完成授权后，令牌会显示在这里。',
+  'Active': '有效',
+  'Issued': '签发于',
+  'Revoke': '撤销',
+  'Revoking': '正在撤销',
+  'Token revoked': '令牌已撤销',
+  'Failed to revoke token': '撤销令牌失败',
+  'Connection Guide': '连接指南',
+  'Access & Authorization': '访问与授权',
+  'Admin Password': '管理员密码',
+  'Set once, used for all OAuth approval screens.': '设置一次，用于所有 OAuth 授权页面。',
+  'Active Connections': '活跃连接',
+  'OpenAI Secure Ingress Managed': 'OpenAI 安全入口已托管',
+  'No active connections.': '暂无活跃连接。',
+  'Refresh Tokens': '刷新令牌',
+  'MCP Instructions & Capabilities': 'MCP 指令与能力',
+  'MCP Instructions': 'MCP 指令',
+  'Reset': '重置',
+  'Automatically sent to the MCP client during session initialization. Reset uses the standard Aura prompt for the current Pi and language settings.': '会话初始化时自动发送给 MCP 客户端。重置会使用当前 Pi 与语言设置对应的 Aura 标准提示词。',
+  'Use Aura Core Capabilities': '使用 Aura 核心能力',
+  "Expose Aura's built-in MCP tools such as read_file, write_file, and execute_shell.": '暴露 Aura 内置 MCP 工具，例如 read_file、write_file 和 execute_shell。',
+  'Loading default tools...': '正在加载默认工具…',
+  'Loading default Aura capabilities...': '正在加载 Aura 默认能力…',
+  'Use Pi Capabilities': '使用 Pi 能力',
+  'Selected Pi tools are exposed and enabled immediately for each MCP connection. Disabled by default.': '选中的 Pi 工具会在每个 MCP 连接中立即暴露并启用。默认关闭。',
+  'Loading Pi tools...': '正在加载 Pi 工具…',
+  'Select visible': '选择当前可见',
+  'Clear visible': '清除当前可见',
+  'All plugins': '全部插件',
+  'Enable Pi capabilities to load the available tool registry.': '启用 Pi 能力以加载可用工具注册表。',
+  'Local Tool Sandbox': '本地工具沙箱',
+  'Filesystem Root': '文件系统根目录',
+  'Shell Policy': 'Shell 策略',
+  'Unrestricted': '不限制',
+  'Allow all': '全部允许',
+  'Allowlist only': '仅允许列表',
+  'Strict allowlist': '严格允许列表',
+  'Denylist enforced': '强制拒绝列表',
+  'Block denylist': '阻止拒绝列表',
+  'Shell Allowlist': 'Shell 允许列表',
+  'Shell Denylist': 'Shell 拒绝列表',
+  'Status: Unrestricted (All commands allowed)': '状态：不限制（允许所有命令）',
+  'Status: Allowlist only (Only allowed commands permitted)': '状态：仅允许列表（只允许白名单命令）',
+  'Status: Denylist enforced (Blocked commands will be rejected)': '状态：已启用拒绝列表（命中的命令将被拒绝）',
+  'Activity & Diagnostic Logs': '活动与诊断日志',
+  'Monitor real-time MCP tool invocations, protocol payloads, and system tunnel diagnostics.': '监控实时 MCP 工具调用、协议载荷和系统隧道诊断。',
+  'MCP Requests': 'MCP 请求',
+  'Tunnel': '隧道',
+  'App Runtime': '应用运行时',
+  'Copy': '复制',
+  'Clear': '清除',
+  'Total Tool Requests': '工具请求总数',
+  'Successful': '成功',
+  'Errors / Blocked': '错误 / 已阻止',
+  'Recent MCP Requests': '最近 MCP 请求',
+  'Waiting for AI assistant MCP requests...': '等待 AI 助手的 MCP 请求…',
+  'Tunnel Process & Diagnostics': '隧道进程与诊断',
+  'Waiting for tunnel events...': '等待隧道事件…',
+  'App Runtime & Lifecycle': '应用运行时与生命周期',
+  'Waiting for app runtime events...': '等待应用运行时事件…'
+};
+
+let currentLanguage = 'en';
+let currentAppearance = 'dark';
+let currentServiceRunning = false;
+
+function t(text) {
+  return currentLanguage === 'zh-CN' ? (ZH_TRANSLATIONS[text] || text) : text;
+}
+
+function localizeStaticText(language) {
+  if (!document.body) return;
+  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+  const nodes = [];
+  while (walker.nextNode()) nodes.push(walker.currentNode);
+
+  nodes.forEach(node => {
+    const parent = node.parentElement;
+    if (!parent || parent.closest('script, style')) return;
+    const trimmed = node.nodeValue.trim();
+    if (!node.__auraEnglishText && ZH_TRANSLATIONS[trimmed]) {
+      node.__auraEnglishText = trimmed;
+      node.__auraPrefix = node.nodeValue.match(/^\s*/)?.[0] || '';
+      node.__auraSuffix = node.nodeValue.match(/\s*$/)?.[0] || '';
+    }
+    if (!node.__auraEnglishText) return;
+    const translated = language === 'zh-CN'
+      ? (ZH_TRANSLATIONS[node.__auraEnglishText] || node.__auraEnglishText)
+      : node.__auraEnglishText;
+    node.nodeValue = `${node.__auraPrefix}${translated}${node.__auraSuffix}`;
+  });
+}
+
+function applyAppearance(appearance) {
+  currentAppearance = appearance === 'light' ? 'light' : 'dark';
+  document.documentElement.dataset.theme = currentAppearance;
+  const display = document.getElementById('appearance-display');
+  if (display) {
+    display.value = t(currentAppearance === 'light' ? 'Light' : 'Dark');
+    display.dataset.value = currentAppearance;
+  }
+}
+
+function applyLanguage(language) {
+  currentLanguage = language === 'zh-CN' ? 'zh-CN' : 'en';
+  document.documentElement.lang = currentLanguage;
+  localizeStaticText(currentLanguage);
+
+  const languageDisplay = document.getElementById('language-display');
+  if (languageDisplay) {
+    languageDisplay.value = currentLanguage === 'zh-CN' ? '中文' : 'English';
+    languageDisplay.dataset.value = currentLanguage;
+  }
+  applyAppearance(currentAppearance);
+
+  const tunnelDisplay = document.getElementById('tunnel-mode-display');
+  const tunnelMode = tunnelDisplay?.dataset.value || tunnelDisplay?.getAttribute('data-value');
+  if (tunnelDisplay && tunnelMode) tunnelDisplay.value = t(modeLabels[tunnelMode] || tunnelMode);
+
+  const shellPolicyDisplay = document.getElementById('shell-policy-display');
+  const shellPolicy = shellPolicyDisplay?.dataset.value || shellPolicyDisplay?.getAttribute('data-value');
+  if (shellPolicyDisplay && shellPolicy) shellPolicyDisplay.value = t(shellPolicyLabels[shellPolicy] || shellPolicy);
+
+  updateServiceUI(currentServiceRunning);
+  if (shellPolicy) updateShellStatus(shellPolicy);
+  updateDefaultToolsSummary();
+  updatePiToolsSummary();
+  if (piCapabilitiesLoaded) populatePiToolPluginFilter();
+}
+
 // Listen to Real-time Logs via IPC immediately at top level
 const mcpLogs = [];
-const httpLogs = [];
 const tunnelLogs = [];
 const runtimeLogs = [];
+const MAX_DOM_LOG_ITEMS = 150;
+let currentMainTab = 'settings';
+let pendingLogsRender = { mcp: false, tunnel: false, runtime: false };
+let mcpMetricsRaf = null;
+
 let piCapabilityTools = [];
 let piCapabilitiesLoaded = false;
 let piCapabilitiesLoadPromise = null;
 let savedMcpInstructions = '';
+let defaultCapabilityTools = [];
+let savedDefaultCapabilitiesEnabled = true;
+let savedDefaultToolNames = new Set();
 let savedPiEnabled = false;
 let savedPiToolNames = new Set();
+let mcpInstructionDefaults = { basic: '', pi: '' };
+
+function debounce(fn, waitMs) {
+  let timeoutId = null;
+  return function (...args) {
+    if (timeoutId) clearTimeout(timeoutId);
+    timeoutId = setTimeout(() => {
+      timeoutId = null;
+      fn.apply(this, args);
+    }, waitMs);
+  };
+}
+
+function rafThrottle(fn) {
+  let rafId = null;
+  return function (...args) {
+    if (rafId) return;
+    rafId = requestAnimationFrame(() => {
+      rafId = null;
+      fn.apply(this, args);
+    }, 0);
+  };
+}
+
+function scheduleUpdateMcpMetrics() {
+  if (mcpMetricsRaf) return;
+  mcpMetricsRaf = requestAnimationFrame(() => {
+    mcpMetricsRaf = null;
+    updateMcpMetrics();
+  });
+}
+
+function flushPendingLogs() {
+  if (pendingLogsRender.mcp) {
+    renderRecentMcpLogs();
+    pendingLogsRender.mcp = false;
+    updateMcpMetrics();
+  }
+  if (pendingLogsRender.tunnel) {
+    renderRecentTunnelLogs();
+    pendingLogsRender.tunnel = false;
+  }
+  if (pendingLogsRender.runtime) {
+    renderRecentRuntimeLogs();
+    pendingLogsRender.runtime = false;
+  }
+}
 
 window.api.onMcpLog((logEntry) => {
   mcpLogs.push(logEntry);
   if (mcpLogs.length > 500) mcpLogs.shift();
-  renderMcpLogItem(logEntry);
-  updateMcpMetrics();
-  updateAllMetrics();
-});
-
-window.api.onHttpLog((logEntry) => {
-  httpLogs.push(logEntry);
-  if (httpLogs.length > 500) httpLogs.shift();
-  renderHttpLogItem(logEntry);
-  updateHttpMetrics();
-  updateAllMetrics();
+  if (currentMainTab === 'logs') {
+    renderMcpLogItem(logEntry);
+    scheduleUpdateMcpMetrics();
+  } else {
+    pendingLogsRender.mcp = true;
+  }
 });
 
 window.api.onTunnelLog((logEntry) => {
   tunnelLogs.push(logEntry);
   if (tunnelLogs.length > 1000) tunnelLogs.shift();
-  renderTunnelLogItem(logEntry);
+  if (currentMainTab === 'logs') {
+    renderTunnelLogItem(logEntry);
+  } else {
+    pendingLogsRender.tunnel = true;
+  }
 });
 
 window.api.onRuntimeLog((logEntry) => {
   runtimeLogs.push(logEntry);
   if (runtimeLogs.length > 1000) runtimeLogs.shift();
-  renderRuntimeLogItem(logEntry);
+  if (currentMainTab === 'logs') {
+    renderRuntimeLogItem(logEntry);
+  } else {
+    pendingLogsRender.runtime = true;
+  }
 });
 
 function switchMainTab(targetTab) {
+  currentMainTab = targetTab;
   const tabBtnSettings = document.getElementById('tab-btn-settings');
   const tabBtnLogs = document.getElementById('tab-btn-logs');
   const surfaceSettings = document.getElementById('surface-settings');
@@ -91,43 +323,32 @@ function switchMainTab(targetTab) {
       surfaceSettings.classList.remove('is-active');
       surfaceSettings.style.display = 'none';
     }
+    flushPendingLogs();
   }
 }
 
 function switchLogSubtab(targetSubtab) {
-  const subtabAll = document.getElementById('log-subtab-all');
   const subtabMcp = document.getElementById('log-subtab-mcp');
-  const subtabHttp = document.getElementById('log-subtab-http');
   const subtabTunnel = document.getElementById('log-subtab-tunnel');
   const subtabRuntime = document.getElementById('log-subtab-runtime');
-  const allLogView = document.getElementById('all-log-view');
   const mcpLogView = document.getElementById('mcp-log-view');
-  const httpLogView = document.getElementById('http-log-view');
   const tunnelLogView = document.getElementById('tunnel-log-view');
   const runtimeLogView = document.getElementById('runtime-log-view');
 
-  [subtabAll, subtabMcp, subtabHttp, subtabTunnel, subtabRuntime].filter(Boolean).forEach(btn => btn.classList.remove('is-active'));
-  if (allLogView) allLogView.style.display = 'none';
+  [subtabMcp, subtabTunnel, subtabRuntime].filter(Boolean).forEach(btn => btn.classList.remove('is-active'));
   if (mcpLogView) mcpLogView.style.display = 'none';
-  if (httpLogView) httpLogView.style.display = 'none';
   if (tunnelLogView) tunnelLogView.style.display = 'none';
   if (runtimeLogView) runtimeLogView.style.display = 'none';
 
-  if (targetSubtab === 'all') {
-    if (subtabAll) subtabAll.classList.add('is-active');
-    if (allLogView) allLogView.style.display = 'block';
-  } else if (targetSubtab === 'mcp') {
+  if (targetSubtab === 'mcp') {
     if (subtabMcp) subtabMcp.classList.add('is-active');
-    if (mcpLogView) mcpLogView.style.display = 'grid';
-  } else if (targetSubtab === 'http') {
-    if (subtabHttp) subtabHttp.classList.add('is-active');
-    if (httpLogView) httpLogView.style.display = 'block';
+    if (mcpLogView) mcpLogView.style.display = 'flex';
   } else if (targetSubtab === 'tunnel') {
     if (subtabTunnel) subtabTunnel.classList.add('is-active');
-    if (tunnelLogView) tunnelLogView.style.display = 'block';
+    if (tunnelLogView) tunnelLogView.style.display = 'flex';
   } else if (targetSubtab === 'runtime') {
     if (subtabRuntime) subtabRuntime.classList.add('is-active');
-    if (runtimeLogView) runtimeLogView.style.display = 'block';
+    if (runtimeLogView) runtimeLogView.style.display = 'flex';
   }
 }
 
@@ -136,7 +357,7 @@ window.switchLogSubtab = switchLogSubtab;
 
 function filterLogs(keyword) {
   const q = String(keyword || '').trim().toLowerCase();
-  document.querySelectorAll('.activity-item, .http-log-item, .tunnel-log-item, .runtime-log-item').forEach(item => {
+  document.querySelectorAll('.activity-item, .tunnel-log-item, .runtime-log-item').forEach(item => {
     item.style.display = !q || item.textContent.toLowerCase().includes(q) ? '' : 'none';
   });
 }
@@ -164,6 +385,159 @@ function focusInput(el, isActive) {
   }
 }
 
+function getSelectedDefaultToolNames() {
+  return Array.from(document.querySelectorAll('#default-tools-list .default-tool-checkbox:checked'))
+    .map(input => input.value)
+    .sort();
+}
+
+function updateDefaultToolsSummary() {
+  const summary = document.getElementById('default-tools-summary');
+  if (!summary) return;
+  const selected = getSelectedDefaultToolNames().length;
+  const available = defaultCapabilityTools.length;
+  summary.textContent = currentLanguage === 'zh-CN'
+    ? `${selected} 个已选择 · ${available} 个可用`
+    : `${selected} selected · ${available} available`;
+}
+
+function renderDefaultCapabilityTools(catalog = [], selected = []) {
+  const list = document.getElementById('default-tools-list');
+  if (!list) return;
+  list.replaceChildren();
+  defaultCapabilityTools = Array.isArray(catalog) ? catalog : [];
+  const selectedNames = new Set(Array.isArray(selected) ? selected : []);
+  const fragment = document.createDocumentFragment();
+  for (const tool of defaultCapabilityTools) {
+    const row = document.createElement('label');
+    row.className = 'pi-tool-item';
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.className = 'default-tool-checkbox';
+    checkbox.value = tool.name;
+    checkbox.checked = selectedNames.has(tool.name);
+    checkbox.addEventListener('change', () => {
+      updateDefaultToolsSummary();
+      scheduleUpdateMcpCapabilitiesSaveState();
+    });
+    const body = document.createElement('div');
+    const name = document.createElement('div');
+    name.className = 'pi-tool-name';
+    name.textContent = tool.name;
+    const description = document.createElement('div');
+    description.className = 'pi-tool-description';
+    description.textContent = tool.description || '';
+    body.append(name, description);
+    row.append(checkbox, body);
+    fragment.appendChild(row);
+  }
+  if (!defaultCapabilityTools.length) {
+    const empty = document.createElement('div');
+    empty.className = 'pi-tools-empty';
+    empty.textContent = 'No default capabilities available.';
+    fragment.appendChild(empty);
+  }
+  list.appendChild(fragment);
+  updateDefaultToolsSummary();
+}
+
+function getPiToolPlugin(tool) {
+  const sourceInfo = tool?.sourceInfo || {};
+  const source = String(sourceInfo.source || '').trim();
+  const sourcePath = String(sourceInfo.path || '').trim();
+
+  if (source === 'builtin') return 'Pi Built-in';
+  if (source.startsWith('npm:')) {
+    const packageName = source.slice('npm:'.length).trim();
+    if (packageName) return packageName;
+  }
+  if (source && !['auto', 'local', 'cli'].includes(source) && !source.startsWith('git:')) {
+    return source;
+  }
+
+  const normalizedPath = sourcePath.replace(/\\/g, '/');
+  const nodeModulesMatch = normalizedPath.match(/\/node_modules\/((?:@[^/]+\/)?[^/]+)/);
+  if (nodeModulesMatch?.[1]) return nodeModulesMatch[1];
+
+  const extensionMatch = normalizedPath.match(/\/extensions\/([^/]+)/);
+  if (extensionMatch?.[1]) {
+    return extensionMatch[1].replace(/\.(?:[cm]?[jt]sx?)$/i, '');
+  }
+
+  if (source.startsWith('git:')) {
+    const gitSource = source.slice('git:'.length).split('#')[0].replace(/\/+$/, '');
+    const gitName = gitSource.split(/[/:]/).filter(Boolean).pop()?.replace(/\.git$/i, '');
+    if (gitName) return gitName;
+  }
+
+  const pathParts = normalizedPath.split('/').filter(Boolean);
+  const fileName = pathParts.pop() || '';
+  const fileStem = fileName.replace(/\.(?:[cm]?[jt]sx?)$/i, '');
+  if (fileStem && fileStem !== 'index') return fileStem;
+  if (pathParts.length) return pathParts[pathParts.length - 1];
+  return source || 'Unknown source';
+}
+
+function populatePiToolPluginFilter() {
+  const display = document.getElementById('pi-tools-plugin-display');
+  const menu = document.getElementById('pi-tools-plugin-dropdown-menu');
+  const arrow = document.getElementById('pi-tools-plugin-arrow');
+  if (!display || !menu) return;
+
+  const previous = display.dataset.value || 'all';
+  const counts = new Map();
+  for (const tool of piCapabilityTools) {
+    const plugin = getPiToolPlugin(tool);
+    counts.set(plugin, (counts.get(plugin) || 0) + 1);
+  }
+
+  const plugins = Array.from(counts.keys()).sort((a, b) => {
+    if (a === 'Pi Built-in') return -1;
+    if (b === 'Pi Built-in') return 1;
+    return a.localeCompare(b);
+  });
+  const entries = [
+    { value: 'all', label: t('All plugins'), count: piCapabilityTools.length },
+    ...plugins.map(plugin => ({ value: plugin, label: plugin, count: counts.get(plugin) }))
+  ];
+  const selectedValue = entries.some(entry => entry.value === previous) ? previous : 'all';
+
+  menu.replaceChildren();
+  for (const entry of entries) {
+    const option = document.createElement('div');
+    option.className = 'combobox-option';
+    option.setAttribute('role', 'option');
+    option.setAttribute('tabindex', '-1');
+    option.setAttribute('aria-selected', 'false');
+    option.dataset.value = entry.value;
+
+    const label = document.createElement('span');
+    label.textContent = entry.label;
+    const count = document.createElement('span');
+    count.style.color = 'var(--color-text-tertiary)';
+    count.style.fontSize = '10px';
+    count.style.flex = 'none';
+    count.textContent = `${entry.count} tool${entry.count === 1 ? '' : 's'}`;
+    option.append(label, count);
+
+    option.addEventListener('click', event => {
+      event.stopPropagation();
+      display.value = `${entry.label} (${entry.count})`;
+      display.dataset.value = entry.value;
+      if (arrow) setMenuVisibility(menu, display, arrow, false);
+      filterPiTools(document.getElementById('pi-tools-search')?.value || '');
+    });
+    menu.appendChild(option);
+
+    if (entry.value === selectedValue) {
+      display.value = `${entry.label} (${entry.count})`;
+      display.dataset.value = entry.value;
+    }
+  }
+
+  if (arrow) setMenuVisibility(menu, display, arrow, false);
+}
+
 function getSelectedPiToolNames() {
   if (!piCapabilitiesLoaded) return Array.from(savedPiToolNames).sort();
   return Array.from(document.querySelectorAll('#pi-tools-list .pi-tool-checkbox:checked'))
@@ -171,28 +545,94 @@ function getSelectedPiToolNames() {
     .sort();
 }
 
+function currentMcpInstructionDefault(piEnabled = document.getElementById('pi-enabled-toggle')?.checked === true) {
+  return piEnabled ? (mcpInstructionDefaults.pi || '') : (mcpInstructionDefaults.basic || '');
+}
+
+function resetMcpInstructions() {
+  const instructions = document.getElementById('mcp-instructions');
+  if (!instructions) return;
+  instructions.value = currentMcpInstructionDefault();
+  updateMcpCapabilitiesSaveState();
+  instructions.focus();
+}
+
+function getVisiblePiToolCheckboxes() {
+  return Array.from(document.querySelectorAll('#pi-tools-list .pi-tool-checkbox'))
+    .filter(input => input.closest('.pi-tool-item')?.style.display !== 'none');
+}
+
+function updatePiToolsBulkButtons() {
+  const selectButton = document.getElementById('pi-tools-select-visible-btn');
+  const clearButton = document.getElementById('pi-tools-clear-visible-btn');
+  if (!selectButton || !clearButton) return;
+  const boxes = getVisiblePiToolCheckboxes();
+  selectButton.disabled = !piCapabilitiesLoaded || boxes.length === 0 || boxes.every(input => input.checked);
+  clearButton.disabled = !piCapabilitiesLoaded || boxes.length === 0 || boxes.every(input => !input.checked);
+}
+
+function setVisiblePiToolsSelected(selected) {
+  const boxes = getVisiblePiToolCheckboxes();
+  if (!boxes.length) return;
+  boxes.forEach(input => { input.checked = selected; });
+  updatePiToolsSummary();
+  updateMcpCapabilitiesSaveState();
+}
+
+function filterPiTools(query = '') {
+  const normalized = String(query || '').trim().toLowerCase();
+  const selectedPlugin = document.getElementById('pi-tools-plugin-display')?.dataset.value || 'all';
+  const rows = Array.from(document.querySelectorAll('#pi-tools-list .pi-tool-item'));
+  let visible = 0;
+  rows.forEach(row => {
+    const matchesSearch = !normalized || String(row.dataset.searchText || '').includes(normalized);
+    const matchesPlugin = selectedPlugin === 'all' || row.dataset.plugin === selectedPlugin;
+    const matches = matchesSearch && matchesPlugin;
+    row.style.display = matches ? '' : 'none';
+    if (matches) visible += 1;
+  });
+  const empty = document.getElementById('pi-tools-filter-empty');
+  if (empty) empty.style.display = rows.length > 0 && visible === 0 ? 'block' : 'none';
+  updatePiToolsBulkButtons();
+}
+
 function updatePiToolsSummary() {
   const summary = document.getElementById('pi-tools-summary');
   if (!summary) return;
   if (!piCapabilitiesLoaded) {
-    summary.textContent = 'Loading Pi tools...';
+    summary.textContent = t('Loading Pi tools...');
     return;
   }
-  summary.textContent = `${getSelectedPiToolNames().length} selected · ${piCapabilityTools.length} available`;
+  const enabled = getSelectedPiToolNames().length;
+  summary.textContent = currentLanguage === 'zh-CN'
+    ? `${enabled} 个已启用 · ${piCapabilityTools.length} 个可用`
+    : `${enabled} enabled · ${piCapabilityTools.length} available`;
+  updatePiToolsBulkButtons();
 }
 
 function updateMcpCapabilitiesSaveState() {
   const saveBtn = document.getElementById('save-mcp-capabilities-btn');
   const instructions = document.getElementById('mcp-instructions');
+  const defaultToggle = document.getElementById('default-capabilities-toggle');
   const piToggle = document.getElementById('pi-enabled-toggle');
-  if (!saveBtn || !instructions || !piToggle) return;
+  if (!saveBtn || !instructions || !defaultToggle || !piToggle) return;
+  const savedDefaultTools = Array.from(savedDefaultToolNames).sort();
+  const currentDefaultTools = getSelectedDefaultToolNames();
   const savedTools = Array.from(savedPiToolNames).sort();
   const currentTools = getSelectedPiToolNames();
   const dirty = instructions.value !== savedMcpInstructions
+    || defaultToggle.checked !== savedDefaultCapabilitiesEnabled
+    || JSON.stringify(currentDefaultTools) !== JSON.stringify(savedDefaultTools)
     || piToggle.checked !== savedPiEnabled
     || JSON.stringify(currentTools) !== JSON.stringify(savedTools);
   saveBtn.classList.toggle('btn-primary', dirty);
 }
+
+const scheduleUpdateMcpCapabilitiesSaveState = rafThrottle(updateMcpCapabilitiesSaveState);
+const scheduleUpdateNetworkSaveState = rafThrottle(updateNetworkSaveState);
+const scheduleUpdateSandboxSaveState = rafThrottle(updateSandboxSaveState);
+const debouncedRenderConnectionGuide = debounce(renderConnectionGuide, 60);
+const debouncedFilterPiTools = debounce((query) => filterPiTools(query), 80);
 
 function renderPiCapabilityTools(result) {
   const list = document.getElementById('pi-tools-list');
@@ -202,6 +642,7 @@ function renderPiCapabilityTools(result) {
   piCapabilityTools = Array.isArray(result?.tools) ? result.tools : [];
   piCapabilitiesLoaded = true;
   if (version) version.textContent = result?.available && result?.version ? `Pi ${result.version}` : '';
+  populatePiToolPluginFilter();
 
   if (!result?.available) {
     const empty = document.createElement('div');
@@ -209,37 +650,49 @@ function renderPiCapabilityTools(result) {
     empty.textContent = `Pi unavailable: ${result?.error || 'installation not found'}`;
     list.appendChild(empty);
     updatePiToolsSummary();
-    updateMcpCapabilitiesSaveState();
+    scheduleUpdateMcpCapabilitiesSaveState();
     return;
   }
 
+  const fragment = document.createDocumentFragment();
   if (piCapabilityTools.length === 0) {
     const empty = document.createElement('div');
     empty.className = 'pi-tools-empty';
     empty.textContent = 'No Pi tools discovered.';
-    list.appendChild(empty);
+    fragment.appendChild(empty);
   }
 
   for (const tool of piCapabilityTools) {
-    const row = document.createElement('label');
+    const row = document.createElement('div');
     row.className = 'pi-tool-item';
+    const toolPlugin = getPiToolPlugin(tool);
+    const sourceInfo = tool.sourceInfo || {};
+    row.dataset.plugin = toolPlugin;
+    row.dataset.searchText = `${tool.name || ''} ${tool.description || ''} ${toolPlugin} ${sourceInfo.source || ''} ${sourceInfo.path || ''} ${sourceInfo.scope || ''} ${sourceInfo.origin || ''}`.toLowerCase();
+
     const checkbox = document.createElement('input');
     checkbox.type = 'checkbox';
     checkbox.className = 'pi-tool-checkbox';
     checkbox.value = tool.name;
     checkbox.checked = savedPiToolNames.has(tool.name);
+
     checkbox.addEventListener('change', () => {
       updatePiToolsSummary();
-      updateMcpCapabilitiesSaveState();
+      scheduleUpdateMcpCapabilitiesSaveState();
     });
 
-    const body = document.createElement('div');
+    const body = document.createElement('label');
+    body.htmlFor = checkbox.id = `pi-tool-${tool.name.replace(/[^A-Za-z0-9_-]/g, '-')}`;
     const nameRow = document.createElement('div');
     nameRow.className = 'pi-tool-name-row';
     const name = document.createElement('span');
     name.className = 'pi-tool-name';
     name.textContent = tool.name;
     nameRow.appendChild(name);
+    const pluginBadge = document.createElement('span');
+    pluginBadge.className = 'pi-tool-plugin-badge';
+    pluginBadge.textContent = toolPlugin;
+    nameRow.appendChild(pluginBadge);
     if (tool.usesPiDefaultModel) {
       const warning = document.createElement('span');
       warning.className = 'pi-tool-token-warning';
@@ -250,12 +703,24 @@ function renderPiCapabilityTools(result) {
     description.className = 'pi-tool-description';
     description.textContent = tool.description || 'No description provided.';
     body.append(nameRow, description);
+
     row.append(checkbox, body);
-    list.appendChild(row);
+    fragment.appendChild(row);
   }
 
+  if (piCapabilityTools.length > 0) {
+    const filterEmpty = document.createElement('div');
+    filterEmpty.id = 'pi-tools-filter-empty';
+    filterEmpty.className = 'pi-tools-empty';
+    filterEmpty.textContent = 'No matching Pi tools.';
+    filterEmpty.style.display = 'none';
+    fragment.appendChild(filterEmpty);
+  }
+
+  list.appendChild(fragment);
   updatePiToolsSummary();
-  updateMcpCapabilitiesSaveState();
+  scheduleUpdateMcpCapabilitiesSaveState();
+  filterPiTools(document.getElementById('pi-tools-search')?.value || '');
 }
 
 async function ensurePiCapabilitiesLoaded() {
@@ -272,30 +737,79 @@ async function ensurePiCapabilitiesLoaded() {
 
 async function initializeMcpCapabilitySettings(config) {
   const instructions = document.getElementById('mcp-instructions');
+  const resetBtn = document.getElementById('reset-mcp-instructions-btn');
+  const defaultToggle = document.getElementById('default-capabilities-toggle');
+  const defaultPanel = document.getElementById('default-tools-panel');
   const piToggle = document.getElementById('pi-enabled-toggle');
   const panel = document.getElementById('pi-tools-panel');
+  const searchInput = document.getElementById('pi-tools-search');
+  const pluginDisplay = document.getElementById('pi-tools-plugin-display');
+  const pluginMenu = document.getElementById('pi-tools-plugin-dropdown-menu');
+  const pluginArrow = document.getElementById('pi-tools-plugin-arrow');
+  const selectVisibleBtn = document.getElementById('pi-tools-select-visible-btn');
+  const clearVisibleBtn = document.getElementById('pi-tools-clear-visible-btn');
   const saveBtn = document.getElementById('save-mcp-capabilities-btn');
-  if (!instructions || !piToggle || !panel || !saveBtn) return;
+  if (!instructions || !defaultToggle || !defaultPanel || !piToggle || !panel || !saveBtn) return;
 
-  savedMcpInstructions = typeof config.mcpInstructions === 'string' ? config.mcpInstructions : '';
+  mcpInstructionDefaults = {
+    basic: typeof config.mcpInstructionDefaults?.basic === 'string' ? config.mcpInstructionDefaults.basic : '',
+    pi: typeof config.mcpInstructionDefaults?.pi === 'string' ? config.mcpInstructionDefaults.pi : ''
+  };
+  savedMcpInstructions = typeof config.mcpInstructions === 'string'
+    ? config.mcpInstructions
+    : currentMcpInstructionDefault(config.piEnabled === true);
+  savedDefaultCapabilitiesEnabled = config.defaultCapabilitiesEnabled !== false;
+  savedDefaultToolNames = new Set(Array.isArray(config.defaultTools) ? config.defaultTools : []);
+  renderDefaultCapabilityTools(config.defaultCapabilitiesCatalog || [], Array.from(savedDefaultToolNames));
+  defaultToggle.checked = savedDefaultCapabilitiesEnabled;
+  defaultPanel.style.display = defaultToggle.checked ? 'block' : 'none';
   savedPiEnabled = config.piEnabled === true;
   savedPiToolNames = new Set(Array.isArray(config.piTools) ? config.piTools : []);
   instructions.value = savedMcpInstructions;
   piToggle.checked = savedPiEnabled;
   panel.style.display = piToggle.checked ? 'block' : 'none';
 
-  instructions.addEventListener('input', updateMcpCapabilitiesSaveState);
+  instructions.addEventListener('input', scheduleUpdateMcpCapabilitiesSaveState);
   instructions.addEventListener('focus', () => focusInput(instructions, true));
   instructions.addEventListener('blur', () => focusInput(instructions, false));
+  resetBtn?.addEventListener('click', resetMcpInstructions);
+  defaultToggle.addEventListener('change', () => {
+    defaultPanel.style.display = defaultToggle.checked ? 'block' : 'none';
+    scheduleUpdateMcpCapabilitiesSaveState();
+  });
+  searchInput?.addEventListener('input', () => debouncedFilterPiTools(searchInput.value));
+  if (pluginDisplay && pluginMenu && pluginArrow) {
+    const togglePluginMenu = () => {
+      const isVisible = pluginMenu.style.display === 'block';
+      closeDropdowns(isVisible ? null : pluginMenu);
+      setMenuVisibility(pluginMenu, pluginDisplay, pluginArrow, !isVisible);
+      if (!isVisible) setActiveOption(pluginMenu, 0);
+    };
+    pluginDisplay.addEventListener('click', togglePluginMenu);
+    pluginArrow.addEventListener('click', event => {
+      event.stopPropagation();
+      togglePluginMenu();
+    });
+    pluginDisplay.addEventListener('keydown', event => handleComboboxKeydown(event, pluginMenu, pluginDisplay, pluginArrow));
+    pluginArrow.addEventListener('keydown', event => handleComboboxKeydown(event, pluginMenu, pluginDisplay, pluginArrow));
+  }
+  selectVisibleBtn?.addEventListener('click', () => setVisiblePiToolsSelected(true));
+  clearVisibleBtn?.addEventListener('click', () => setVisiblePiToolsSelected(false));
   piToggle.addEventListener('change', async () => {
+    const previousDefault = currentMcpInstructionDefault(!piToggle.checked);
+    const nextDefault = currentMcpInstructionDefault(piToggle.checked);
+    if (!instructions.value.trim() || instructions.value === previousDefault) {
+      instructions.value = nextDefault;
+    }
     panel.style.display = piToggle.checked ? 'block' : 'none';
     if (piToggle.checked) await ensurePiCapabilitiesLoaded();
-    updateMcpCapabilitiesSaveState();
+    scheduleUpdateMcpCapabilitiesSaveState();
   });
   saveBtn.addEventListener('click', saveMcpCapabilitySettings);
 
   if (piToggle.checked) await ensurePiCapabilitiesLoaded();
-  updateMcpCapabilitiesSaveState();
+  else updatePiToolsBulkButtons();
+  scheduleUpdateMcpCapabilitiesSaveState();
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -313,6 +827,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   const config = await window.api.getConfig();
+  applyAppearance(config.appearance || 'dark');
+  applyLanguage(config.language || 'en');
 
   const cfPathInput = document.getElementById('cf-config-path');
   const mcpUrlInput = document.getElementById('mcp-url');
@@ -338,7 +854,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   await initializeMcpCapabilitySettings(config);
-  await populateListenAddresses(config.listenHost);
   await loadProviderFields(currentMode, config);
 
   if (config.fsRoot) {
@@ -351,7 +866,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const initialPolicy = config.shellPolicy || 'unrestricted';
   const policyDisplay = document.getElementById('shell-policy-display');
   if (policyDisplay) {
-    policyDisplay.value = shellPolicyLabels[initialPolicy] || 'Unrestricted';
+    policyDisplay.value = t(shellPolicyLabels[initialPolicy] || 'Unrestricted');
     policyDisplay.setAttribute('data-value', initialPolicy);
     policyDisplay.dataset.savedValue = initialPolicy;
   }
@@ -377,7 +892,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     .forEach(input => {
       input.dataset.savedValue = input.value;
       input.addEventListener('input', () => {
-        updateSandboxSaveState();
+        scheduleUpdateSandboxSaveState();
         const curPolicy = document.getElementById('shell-policy-display')?.getAttribute('data-value') || 'unrestricted';
         updateShellStatus(curPolicy);
       });
@@ -392,12 +907,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     input.addEventListener('focus', () => focusInput(input, true));
     input.addEventListener('blur', () => focusInput(input, false));
     input.addEventListener('input', () => {
-      updateNetworkSaveState();
+      scheduleUpdateNetworkSaveState();
       if (input === openaiTunnelIdInput) {
-        renderConnectionGuide(getCurrentMode(), document.getElementById('mcp-url')?.value);
+        debouncedRenderConnectionGuide(getCurrentMode(), document.getElementById('mcp-url')?.value);
       }
     });
-    input.addEventListener('change', updateNetworkSaveState);
+    input.addEventListener('change', scheduleUpdateNetworkSaveState);
   });
 
   const openaiApiKeyToggleBtn = document.getElementById('openai-api-key-toggle-btn');
@@ -405,7 +920,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     openaiApiKeyToggleBtn.addEventListener('click', () => {
       const isPassword = openaiApiKeyInput.type === 'password';
       openaiApiKeyInput.type = isPassword ? 'text' : 'password';
-      openaiApiKeyToggleBtn.textContent = isPassword ? 'Hide' : 'Show';
+      openaiApiKeyToggleBtn.textContent = t(isPassword ? 'Hide' : 'Show');
     });
   }
 
@@ -460,44 +975,32 @@ document.addEventListener('DOMContentLoaded', async () => {
 async function loadInitialLogs() {
   try {
     const data = await window.api.getRecentLogs();
+
+    // Clear in-memory arrays before loading to prevent duplicates
+    mcpLogs.length = 0;
+    tunnelLogs.length = 0;
+    runtimeLogs.length = 0;
+
     if (data && Array.isArray(data.tunnelLogs)) {
-      data.tunnelLogs.forEach(entry => {
-        tunnelLogs.push(entry);
-        renderTunnelLogItem(entry);
-      });
+      tunnelLogs.push(...data.tunnelLogs);
     }
     if (data && Array.isArray(data.appRuntimeLogs)) {
-      data.appRuntimeLogs.forEach(entry => {
-        runtimeLogs.push(entry);
-        renderRuntimeLogItem(entry);
-      });
-    }
-
-    // Load merged MCP & HTTP items in chronological order
-    const events = [];
-    if (data && Array.isArray(data.httpLogs)) {
-      data.httpLogs.forEach(entry => {
-        httpLogs.push(entry);
-        events.push({ type: 'http', data: entry, time: new Date(entry.timestamp).getTime() });
-      });
+      runtimeLogs.push(...data.appRuntimeLogs);
     }
     if (data && Array.isArray(data.mcpLogs)) {
-      data.mcpLogs.forEach(entry => {
-        mcpLogs.push(entry);
-        events.push({ type: 'mcp', data: entry, time: new Date(entry.timestamp).getTime() });
-      });
+      mcpLogs.push(...data.mcpLogs);
     }
 
-    events.sort((a, b) => a.time - b.time);
-    events.forEach(evt => {
-      if (evt.type === 'http') {
-        renderHttpLogItem(evt.data);
-      } else {
-        renderMcpLogItem(evt.data);
-      }
-    });
-
-    updateMcpMetrics();
+    if (currentMainTab === 'logs') {
+      renderRecentMcpLogs();
+      renderRecentTunnelLogs();
+      renderRecentRuntimeLogs();
+      updateMcpMetrics();
+    } else {
+      pendingLogsRender.mcp = true;
+      pendingLogsRender.tunnel = true;
+      pendingLogsRender.runtime = true;
+    }
   } catch (err) {
     console.error('Failed to load initial logs:', err);
   }
@@ -567,6 +1070,7 @@ async function populateListenAddresses(selectedAddress = '') {
   try {
     const addresses = await window.api.getListenAddresses();
     menu.replaceChildren();
+    const fragment = document.createDocumentFragment();
     addresses.forEach(entry => {
       const option = document.createElement('div');
       option.className = 'combobox-option';
@@ -580,10 +1084,11 @@ async function populateListenAddresses(selectedAddress = '') {
         input.value = option.textContent;
         input.dataset.value = entry.address;
         setMenuVisibility(menu, input, arrow, false);
-        updateNetworkSaveState();
+        scheduleUpdateNetworkSaveState();
       });
-      menu.appendChild(option);
+      fragment.appendChild(option);
     });
+    menu.appendChild(fragment);
     const selected = addresses.find(entry => entry.address === selectedAddress);
     input.value = selected
       ? `${selected.address} · ${selected.name}`
@@ -642,7 +1147,7 @@ async function loadProviderFields(mode, config = null) {
     customSslKeyInput.dataset.savedValue = customSslKeyInput.value;
   }
 
-  tunnelDisplay.value = modeLabels[mode] || mode;
+  tunnelDisplay.value = t(modeLabels[mode] || mode);
   tunnelDisplay.setAttribute('data-value', mode);
   tunnelDisplay.dataset.value = mode;
   await populateListenAddresses(providerConfig.listenHost);
@@ -650,6 +1155,7 @@ async function loadProviderFields(mode, config = null) {
 }
 
 function updateServiceUI(isRunning) {
+  currentServiceRunning = !!isRunning;
   const badge = document.getElementById('status-indicator');
   const text = document.getElementById('status-text');
   const btn = document.getElementById('power-btn');
@@ -657,15 +1163,15 @@ function updateServiceUI(isRunning) {
 
   if (isRunning) {
     badge.className = 'status-badge';
-    text.textContent = 'Running';
-    btn.textContent = 'Disconnect';
+    text.textContent = t('Running');
+    btn.textContent = t('Disconnect');
     btn.className = 'btn btn-danger';
     btn.style.color = '';
     btn.style.border = '';
   } else {
     badge.className = 'status-badge is-stopped';
-    text.textContent = 'Stopped';
-    btn.textContent = 'Connect';
+    text.textContent = t('Stopped');
+    btn.textContent = t('Connect');
     btn.className = 'btn btn-secondary';
     btn.style.color = 'var(--green-300)';
     btn.style.border = '1px solid rgb(64 201 119 / 26%)';
@@ -690,7 +1196,7 @@ const debugModeToggle = document.getElementById('debug-mode-toggle');
 if (debugModeToggle) {
   debugModeToggle.addEventListener('change', async (e) => {
     await window.api.saveConfig({ debugMode: e.target.checked });
-    flashTransientHint(`Debug mode ${e.target.checked ? 'enabled (verbose logging)' : 'disabled'}`, 'tunnel-install-hint');
+    flashTransientHint(t(e.target.checked ? 'Debug mode enabled (verbose logging)' : 'Debug mode disabled'), 'tunnel-install-hint');
   });
 }
 
@@ -704,10 +1210,10 @@ async function refreshTokens() {
     emptyNotice.className = 'token-empty-state';
 
     const emptyTitle = document.createElement('strong');
-    emptyTitle.textContent = 'No active tokens';
+    emptyTitle.textContent = t('No active tokens');
 
     const emptyDetail = document.createElement('span');
-    emptyDetail.textContent = 'Tokens will appear here after an MCP client completes authorization.';
+    emptyDetail.textContent = t('Tokens will appear here after an MCP client completes authorization.');
 
     emptyNotice.appendChild(emptyTitle);
     emptyNotice.appendChild(emptyDetail);
@@ -715,11 +1221,11 @@ async function refreshTokens() {
     return;
   }
 
-  tokens.forEach(t => {
+  tokens.forEach(tokenInfo => {
     const div = document.createElement('div');
     div.className = 'token-item';
 
-    const time = new Date(t.issuedAt).toLocaleTimeString();
+    const time = new Date(tokenInfo.issuedAt).toLocaleTimeString();
     const infoContainer = document.createElement('div');
     infoContainer.style.minWidth = '0';
     infoContainer.style.overflow = 'hidden';
@@ -729,19 +1235,19 @@ async function refreshTokens() {
     const clientIdEl = document.createElement('div');
     clientIdEl.style.color = 'var(--color-text-primary)';
     clientIdEl.style.fontWeight = '500';
-    clientIdEl.textContent = t.client_id;
+    clientIdEl.textContent = tokenInfo.client_id;
 
     const metaEl = document.createElement('div');
     metaEl.className = 'token-meta';
 
-    const durationText = t.duration || 'unknown';
+    const durationText = tokenInfo.duration || 'unknown';
     const durationBadge = document.createElement('span');
     durationBadge.className = 'token-badge is-duration';
     durationBadge.textContent = durationText;
 
     const validBadge = document.createElement('span');
     validBadge.className = 'token-badge is-valid';
-    validBadge.textContent = 'Active';
+    validBadge.textContent = t('Active');
 
     metaEl.appendChild(durationBadge);
     metaEl.appendChild(validBadge);
@@ -749,7 +1255,7 @@ async function refreshTokens() {
     const issuedEl = document.createElement('div');
     issuedEl.style.color = 'var(--color-text-tertiary)';
     issuedEl.style.fontSize = '10px';
-    issuedEl.textContent = `Issued ${time}`;
+    issuedEl.textContent = `${t('Issued')} ${time}`;
 
     infoContainer.appendChild(clientIdEl);
     infoContainer.appendChild(issuedEl);
@@ -757,19 +1263,19 @@ async function refreshTokens() {
 
     const revokeBtn = document.createElement('button');
     revokeBtn.className = 'btn btn-danger';
-    revokeBtn.textContent = 'Revoke';
+    revokeBtn.textContent = t('Revoke');
     revokeBtn.addEventListener('click', async () => {
       const originalText = revokeBtn.textContent;
       revokeBtn.disabled = true;
       revokeBtn.classList.add('is-loading');
-      revokeBtn.textContent = 'Revoking';
+      revokeBtn.textContent = t('Revoking');
       try {
-        await window.api.revokeToken(t.token);
-        flashTransientHint('Token revoked', 'tunnel-install-hint');
+        await window.api.revokeToken(tokenInfo.token);
+        flashTransientHint(t('Token revoked'), 'tunnel-install-hint');
         await refreshTokens();
       } catch (err) {
         console.error('Failed to revoke token:', err);
-        flashTransientHint('Failed to revoke token', 'tunnel-install-hint');
+        flashTransientHint(t('Failed to revoke token'), 'tunnel-install-hint');
         revokeBtn.textContent = originalText;
         revokeBtn.disabled = false;
         revokeBtn.classList.remove('is-loading');
@@ -796,25 +1302,26 @@ function updateShellStatus(policy) {
   const statusEl = document.getElementById('shell-status');
   if (!statusEl) return;
   if (policy === 'unrestricted') {
-    statusEl.textContent = 'Status: Unrestricted (All commands allowed)';
+    statusEl.textContent = t('Status: Unrestricted (All commands allowed)');
     statusEl.style.color = 'var(--orange-300)';
   } else if (policy === 'allowlist') {
-    statusEl.textContent = 'Status: Allowlist only (Only allowed commands permitted)';
+    statusEl.textContent = t('Status: Allowlist only (Only allowed commands permitted)');
     statusEl.style.color = 'var(--green-300)';
   } else if (policy === 'denylist') {
-    statusEl.textContent = 'Status: Denylist enforced (Blocked commands will be rejected)';
+    statusEl.textContent = t('Status: Denylist enforced (Blocked commands will be rejected)');
     statusEl.style.color = 'var(--green-300)';
   }
 }
 
 function flashSaveFeedback(btn, successText = 'Saved ✓') {
   if (!btn) return;
-  btn.textContent = successText;
+  const localizedSuccessText = t(successText);
+  btn.textContent = localizedSuccessText;
   btn.classList.remove('is-loading');
   btn.classList.add('btn-success');
   setTimeout(() => {
-    if (btn.textContent === successText) {
-      btn.textContent = 'Save';
+    if (btn.textContent === localizedSuccessText) {
+      btn.textContent = t('Save');
     }
     btn.classList.remove('btn-success');
   }, 1400);
@@ -842,7 +1349,13 @@ document.getElementById('tunnel-doc-link').addEventListener('click', (e) => {
   }
 });
 
-// Accessible custom dropdowns for Tunnel Mode, hostname, and config file.
+// Accessible custom dropdowns for preferences, Tunnel Mode, hostname, and config file.
+const languageMenu = document.getElementById('language-dropdown-menu');
+const languageArrowBtn = document.getElementById('language-arrow');
+const languageDisplay = document.getElementById('language-display');
+const appearanceMenu = document.getElementById('appearance-dropdown-menu');
+const appearanceArrowBtn = document.getElementById('appearance-arrow');
+const appearanceDisplay = document.getElementById('appearance-display');
 const tunnelMenu = document.getElementById('tunnel-mode-dropdown-menu');
 const tunnelArrowBtn = document.getElementById('tunnel-mode-arrow');
 const tunnelDisplay = document.getElementById('tunnel-mode-display');
@@ -880,6 +1393,11 @@ function closeDropdowns(except = null) {
   const shellPolicyMenu = document.getElementById('shell-policy-dropdown-menu');
   const shellPolicyDisplay = document.getElementById('shell-policy-display');
   const shellPolicyArrowBtn = document.getElementById('shell-policy-arrow');
+  const pluginMenu = document.getElementById('pi-tools-plugin-dropdown-menu');
+  const pluginDisplay = document.getElementById('pi-tools-plugin-display');
+  const pluginArrow = document.getElementById('pi-tools-plugin-arrow');
+  if (except !== languageMenu) setMenuVisibility(languageMenu, languageDisplay, languageArrowBtn, false);
+  if (except !== appearanceMenu) setMenuVisibility(appearanceMenu, appearanceDisplay, appearanceArrowBtn, false);
   if (except !== tunnelMenu) setMenuVisibility(tunnelMenu, tunnelDisplay, tunnelArrowBtn, false);
   if (except !== dropdownMenu) setMenuVisibility(dropdownMenu, document.getElementById('mcp-url'), arrowBtn, false);
   if (except !== configDropdownMenu) setMenuVisibility(configDropdownMenu, configInput, configArrowBtn, false);
@@ -890,6 +1408,9 @@ function closeDropdowns(except = null) {
   }
   if (shellPolicyMenu && shellPolicyDisplay && shellPolicyArrowBtn && except !== shellPolicyMenu) {
     setMenuVisibility(shellPolicyMenu, shellPolicyDisplay, shellPolicyArrowBtn, false);
+  }
+  if (pluginMenu && pluginDisplay && pluginArrow && except !== pluginMenu) {
+    setMenuVisibility(pluginMenu, pluginDisplay, pluginArrow, false);
   }
 }
 
@@ -952,6 +1473,20 @@ function handleComboboxKeydown(event, menu, input, arrow) {
   if (event.key === 'End') setActiveOption(menu, options.length - 1);
 }
 
+function toggleLanguageMenu() {
+  const isVisible = languageMenu.style.display === 'block';
+  closeDropdowns(isVisible ? null : languageMenu);
+  setMenuVisibility(languageMenu, languageDisplay, languageArrowBtn, !isVisible);
+  if (!isVisible) setActiveOption(languageMenu, currentLanguage === 'zh-CN' ? 1 : 0);
+}
+
+function toggleAppearanceMenu() {
+  const isVisible = appearanceMenu.style.display === 'block';
+  closeDropdowns(isVisible ? null : appearanceMenu);
+  setMenuVisibility(appearanceMenu, appearanceDisplay, appearanceArrowBtn, !isVisible);
+  if (!isVisible) setActiveOption(appearanceMenu, currentAppearance === 'light' ? 1 : 0);
+}
+
 function toggleTunnelMenu() {
   const isVisible = tunnelMenu.style.display === 'block';
   closeDropdowns(isVisible ? null : tunnelMenu);
@@ -989,6 +1524,16 @@ function toggleCustomSslCertMenu() {
   setMenuVisibility(customSslCertMenu, customSslCertInput, customSslCertArrowBtn, !isVisible);
   if (!isVisible) setActiveOption(customSslCertMenu, 0);
 }
+
+languageArrowBtn.addEventListener('click', toggleLanguageMenu);
+languageDisplay.addEventListener('click', toggleLanguageMenu);
+languageDisplay.addEventListener('keydown', event => handleComboboxKeydown(event, languageMenu, languageDisplay, languageArrowBtn));
+languageArrowBtn.addEventListener('keydown', event => handleComboboxKeydown(event, languageMenu, languageDisplay, languageArrowBtn));
+
+appearanceArrowBtn.addEventListener('click', toggleAppearanceMenu);
+appearanceDisplay.addEventListener('click', toggleAppearanceMenu);
+appearanceDisplay.addEventListener('keydown', event => handleComboboxKeydown(event, appearanceMenu, appearanceDisplay, appearanceArrowBtn));
+appearanceArrowBtn.addEventListener('keydown', event => handleComboboxKeydown(event, appearanceMenu, appearanceDisplay, appearanceArrowBtn));
 
 tunnelArrowBtn.addEventListener('click', toggleTunnelMenu);
 tunnelDisplay.addEventListener('click', toggleTunnelMenu);
@@ -1028,6 +1573,42 @@ if (customSslCertArrowBtn && customSslCertInput && customSslCertMenu) {
   customSslCertArrowBtn.addEventListener('keydown', event => handleComboboxKeydown(event, customSslCertMenu, customSslCertInput, customSslCertArrowBtn));
 }
 
+languageMenu.querySelectorAll('[role="option"]').forEach(option => {
+  option.setAttribute('aria-selected', 'false');
+  option.addEventListener('click', async event => {
+    event.stopPropagation();
+    const instructions = document.getElementById('mcp-instructions');
+    const previousDefault = currentMcpInstructionDefault();
+    const wasUsingDefault = !!instructions && (!instructions.value.trim() || instructions.value === previousDefault);
+    const language = option.getAttribute('data-value');
+    setMenuVisibility(languageMenu, languageDisplay, languageArrowBtn, false);
+    applyLanguage(language);
+    const updatedConfig = await window.api.saveConfig({ language: currentLanguage });
+    mcpInstructionDefaults = {
+      basic: typeof updatedConfig?.mcpInstructionDefaults?.basic === 'string' ? updatedConfig.mcpInstructionDefaults.basic : '',
+      pi: typeof updatedConfig?.mcpInstructionDefaults?.pi === 'string' ? updatedConfig.mcpInstructionDefaults.pi : ''
+    };
+    if (typeof updatedConfig?.mcpInstructions === 'string') {
+      savedMcpInstructions = updatedConfig.mcpInstructions;
+    }
+    if (wasUsingDefault && instructions) {
+      instructions.value = currentMcpInstructionDefault();
+    }
+    scheduleUpdateMcpCapabilitiesSaveState();
+  });
+});
+
+appearanceMenu.querySelectorAll('[role="option"]').forEach(option => {
+  option.setAttribute('aria-selected', 'false');
+  option.addEventListener('click', async event => {
+    event.stopPropagation();
+    const appearance = option.getAttribute('data-value');
+    setMenuVisibility(appearanceMenu, appearanceDisplay, appearanceArrowBtn, false);
+    applyAppearance(appearance);
+    await window.api.saveConfig({ appearance: currentAppearance });
+  });
+});
+
 tunnelMenu.querySelectorAll('[role="option"]').forEach(option => {
   option.setAttribute('aria-selected', 'false');
   option.addEventListener('click', async event => {
@@ -1060,7 +1641,7 @@ shellPolicyMenu.querySelectorAll('[role="option"]').forEach(option => {
   option.addEventListener('click', event => {
     event.stopPropagation();
     const policy = option.getAttribute('data-value');
-    shellPolicyDisplay.value = shellPolicyLabels[policy] || policy;
+    shellPolicyDisplay.value = t(shellPolicyLabels[policy] || policy);
     shellPolicyDisplay.setAttribute('data-value', policy);
     setMenuVisibility(shellPolicyMenu, shellPolicyDisplay, shellPolicyArrowBtn, false);
     updateSandboxSaveState();
@@ -1068,18 +1649,14 @@ shellPolicyMenu.querySelectorAll('[role="option"]').forEach(option => {
   });
 });
 
+setMenuVisibility(languageMenu, languageDisplay, languageArrowBtn, false);
+setMenuVisibility(appearanceMenu, appearanceDisplay, appearanceArrowBtn, false);
 setMenuVisibility(tunnelMenu, tunnelDisplay, tunnelArrowBtn, false);
 setMenuVisibility(dropdownMenu, hostnameInput, arrowBtn, false);
 setMenuVisibility(configDropdownMenu, configInput, configArrowBtn, false);
 setMenuVisibility(openaiBinaryMenu, openaiBinaryInput, openaiBinaryArrowBtn, false);
 setMenuVisibility(customSslCertMenu, customSslCertInput, customSslCertArrowBtn, false);
 setMenuVisibility(shellPolicyMenu, shellPolicyDisplay, shellPolicyArrowBtn, false);
-
- document.getElementById('clear-log-btn').addEventListener('click', () => {
-  const logBox = document.getElementById('activity-log');
-  logBox.value = '';
-  flashTransientHint('Activity log cleared', 'tunnel-install-hint');
-});
 
 async function saveNetworkSettings() {
   const networkSaveBtn = document.getElementById('save-network-btn');
@@ -1179,27 +1756,38 @@ async function saveAccessSettings() {
 async function saveMcpCapabilitySettings() {
   const saveBtn = document.getElementById('save-mcp-capabilities-btn');
   const instructions = document.getElementById('mcp-instructions');
+  const defaultToggle = document.getElementById('default-capabilities-toggle');
   const piToggle = document.getElementById('pi-enabled-toggle');
-  if (!saveBtn || !instructions || !piToggle) return;
+  if (!saveBtn || !instructions || !defaultToggle || !piToggle) return;
 
   if (piToggle.checked && !piCapabilitiesLoaded) {
     await ensurePiCapabilitiesLoaded();
   }
 
+  const selectedDefaultTools = getSelectedDefaultToolNames();
   const selectedTools = getSelectedPiToolNames();
   const selectedToolSet = new Set(selectedTools);
   const allowPiModelTools = piCapabilityTools.some(tool => tool.usesPiDefaultModel && selectedToolSet.has(tool.name));
+  const mcpContractChanged = instructions.value !== savedMcpInstructions
+    || defaultToggle.checked !== savedDefaultCapabilitiesEnabled
+    || JSON.stringify(selectedDefaultTools) !== JSON.stringify(Array.from(savedDefaultToolNames).sort())
+    || piToggle.checked !== savedPiEnabled
+    || JSON.stringify(selectedTools) !== JSON.stringify(Array.from(savedPiToolNames).sort());
 
   saveBtn.classList.add('is-loading');
   try {
     await window.api.saveConfig({
       mcpInstructions: instructions.value,
+      defaultCapabilitiesEnabled: defaultToggle.checked,
+      defaultTools: selectedDefaultTools,
       piEnabled: piToggle.checked,
       piTools: selectedTools,
       piAllowModelTools: allowPiModelTools
     });
 
     savedMcpInstructions = instructions.value;
+    savedDefaultCapabilitiesEnabled = defaultToggle.checked;
+    savedDefaultToolNames = new Set(selectedDefaultTools);
     savedPiEnabled = piToggle.checked;
     savedPiToolNames = new Set(selectedTools);
     updateMcpCapabilitiesSaveState();
@@ -1207,6 +1795,12 @@ async function saveMcpCapabilitySettings() {
 
     const isRunning = await window.api.getServiceState();
     if (isRunning) await restartCurrentServices();
+
+    if (mcpContractChanged) {
+      window.alert(currentLanguage === 'zh-CN'
+        ? 'MCP 指令或能力已更新。\n\n请前往 ChatGPT 插件页面点击“刷新”，或重新连接 Aura，以加载最新配置。'
+        : 'MCP instructions or capabilities were updated.\n\nOpen the ChatGPT plugin page and click “Refresh”, or reconnect Aura to load the latest configuration.');
+    }
   } catch (err) {
     console.error('Failed to save MCP/Pi settings:', err);
     flashTransientHint('Failed to save MCP/Pi settings: ' + err.message, 'tunnel-install-hint');
@@ -1307,6 +1901,7 @@ document.addEventListener('click', (event) => {
   closeDropdowns();
 });
 
+const listenAddressWrapper = document.getElementById('listen-address-combobox-wrapper');
 const listenAddressInput = document.getElementById('listen-host');
 const listenAddressMenu = document.getElementById('listen-address-dropdown-menu');
 const listenAddressArrow = document.getElementById('listen-address-arrow');
@@ -1317,9 +1912,9 @@ function toggleListenAddressMenu() {
   setMenuVisibility(listenAddressMenu, listenAddressInput, listenAddressArrow, !isVisible);
   if (!isVisible) setActiveOption(listenAddressMenu, 0);
 }
-if (listenAddressInput && listenAddressArrow && listenAddressMenu) {
-  listenAddressInput.addEventListener('click', toggleListenAddressMenu);
-  listenAddressArrow.addEventListener('click', event => {
+if (listenAddressWrapper && listenAddressInput && listenAddressArrow && listenAddressMenu) {
+  listenAddressWrapper.addEventListener('click', event => {
+    if (event.target.closest('.combobox-option')) return;
     event.stopPropagation();
     toggleListenAddressMenu();
   });
@@ -1448,6 +2043,7 @@ async function reloadCfHostnames() {
   const cfInfo = await window.api.getCfHostnames(configPath);
   if (cfInfo && cfInfo.hostnames && cfInfo.hostnames.length > 0) {
     dropdownMenu.replaceChildren();
+    const fragment = document.createDocumentFragment();
     cfInfo.hostnames.forEach(h => {
       const item = document.createElement('div');
       item.className = 'combobox-option';
@@ -1469,13 +2065,14 @@ async function reloadCfHostnames() {
       item.addEventListener('click', (e) => {
         e.stopPropagation();
         urlInput.value = `https://${h}`;
-        updateNetworkSaveState();
+        scheduleUpdateNetworkSaveState();
         setMenuVisibility(dropdownMenu, urlInput, cfArrow, false);
         const mode = document.getElementById('tunnel-mode-display').getAttribute('data-value') || 'cloudflare-named';
-        renderConnectionGuide(mode, urlInput.value);
+        debouncedRenderConnectionGuide(mode, urlInput.value);
       });
-      dropdownMenu.appendChild(item);
+      fragment.appendChild(item);
     });
+    dropdownMenu.appendChild(fragment);
     cfArrow.style.display = 'flex';
     cfArrow.disabled = false;
   } else {
@@ -1491,6 +2088,7 @@ async function reloadCfConfigFiles() {
   const configs = await window.api.discoverCfConfigs();
   if (configs && configs.length > 0) {
     configMenu.replaceChildren();
+    const fragment = document.createDocumentFragment();
     configs.forEach(p => {
       const item = document.createElement('div');
       item.className = 'combobox-option';
@@ -1516,10 +2114,11 @@ async function reloadCfConfigFiles() {
         e.stopPropagation();
         configInput.value = p;
         setMenuVisibility(configMenu, configInput, configArrow, false);
-        updateNetworkSaveState();
+        scheduleUpdateNetworkSaveState();
       });
-      configMenu.appendChild(item);
+      fragment.appendChild(item);
     });
+    configMenu.appendChild(fragment);
     configArrow.style.display = 'flex';
   } else {
     configArrow.style.display = 'none';
@@ -1535,6 +2134,7 @@ async function reloadTunnelBinaries() {
   const binaries = await window.api.discoverTunnelBinaries();
   if (binaries && binaries.length > 0) {
     binaryMenu.replaceChildren();
+    const fragment = document.createDocumentFragment();
     binaries.forEach(p => {
       const item = document.createElement('div');
       item.className = 'combobox-option';
@@ -1560,10 +2160,11 @@ async function reloadTunnelBinaries() {
         e.stopPropagation();
         binaryInput.value = p;
         setMenuVisibility(binaryMenu, binaryInput, binaryArrow, false);
-        updateNetworkSaveState();
+        scheduleUpdateNetworkSaveState();
       });
-      binaryMenu.appendChild(item);
+      fragment.appendChild(item);
     });
+    binaryMenu.appendChild(fragment);
     binaryArrow.style.display = 'flex';
     if (!binaryInput.value) {
       binaryInput.placeholder = `Auto-detected: ${binaries[0]}`;
@@ -1588,6 +2189,7 @@ async function reloadAcmeCerts() {
     const certs = await window.api.discoverAcmeCerts();
     if (certs && certs.length > 0) {
       certMenu.replaceChildren();
+      const fragment = document.createDocumentFragment();
       certs.forEach(cert => {
         const item = document.createElement('div');
         item.className = 'combobox-option';
@@ -1617,12 +2219,13 @@ async function reloadAcmeCerts() {
             mcpUrlInput.value = `https://${cert.domain}`;
           }
           setMenuVisibility(certMenu, certInput, certArrow, false);
-          updateNetworkSaveState();
+          scheduleUpdateNetworkSaveState();
           const mode = getCurrentMode();
-          renderConnectionGuide(mode, mcpUrlInput ? mcpUrlInput.value : '');
+          debouncedRenderConnectionGuide(mode, mcpUrlInput ? mcpUrlInput.value : '');
         });
-        certMenu.appendChild(item);
+        fragment.appendChild(item);
       });
+      certMenu.appendChild(fragment);
       certArrow.style.display = 'flex';
       if (!certInput.value) {
         certInput.placeholder = `Detected: ${certs[0].domain}`;
@@ -1702,8 +2305,7 @@ async function updateTunnelModeFields(mode) {
     urlInput.style.backgroundColor = 'var(--color-background-control)';
     hintEl.style.display = 'block';
     linkEl.textContent = 'cloudflared';
-    await reloadCfConfigFiles();
-    await reloadCfHostnames();
+    await Promise.all([reloadCfConfigFiles(), reloadCfHostnames()]);
   } else {
     if (cfConfigRow) cfConfigRow.style.display = 'none';
     if (mcpUrlRow) mcpUrlRow.style.display = 'grid';
@@ -1740,24 +2342,6 @@ window.api.onUrlUpdated((url) => {
 });
 
 // --- Tab Switcher (Settings / Logs) & Sub-tabs Initialized in switchMainTab/switchLogSubtab ---
-function updateAllMetrics() {
-  const mcpTotal = mcpLogs.length;
-  const httpTotal = httpLogs.length;
-  const total = mcpTotal + httpTotal;
-  const mcpErrors = mcpLogs.filter(l => l.result !== 'Success').length;
-  const httpErrors = httpLogs.filter(l => l.status >= 400).length;
-  const totalErrors = mcpErrors + httpErrors;
-
-  const elTotal = document.getElementById('metric-all-total');
-  const elMcp = document.getElementById('metric-all-mcp');
-  const elHttp = document.getElementById('metric-all-http');
-  const elErrors = document.getElementById('metric-all-errors');
-  if (elTotal) elTotal.textContent = String(total);
-  if (elMcp) elMcp.textContent = String(mcpTotal);
-  if (elHttp) elHttp.textContent = String(httpTotal);
-  if (elErrors) elErrors.textContent = String(totalErrors);
-}
-
 function updateMcpMetrics() {
   const total = mcpLogs.length;
   const success = mcpLogs.filter(l => l.result === 'Success').length;
@@ -1771,317 +2355,316 @@ function updateMcpMetrics() {
   if (elErrors) elErrors.textContent = String(errors);
 }
 
-function updateHttpMetrics() {
-  const total = httpLogs.length;
-  const success = httpLogs.filter(l => l.status < 400).length;
-  const errors = total - success;
-
-  const elTotal = document.getElementById('metric-http-total');
-  const elSuccess = document.getElementById('metric-http-success');
-  const elErrors = document.getElementById('metric-http-errors');
-  if (elTotal) elTotal.textContent = String(total);
-  if (elSuccess) elSuccess.textContent = String(success);
-  if (elErrors) elErrors.textContent = String(errors);
+function getToolCategoryClass(toolName) {
+  const name = String(toolName || '').toLowerCase();
+  if (name.includes('read') || name.includes('search') || name.includes('get') || name.includes('list')) return 'tool-read';
+  if (name.includes('write') || name.includes('save') || name.includes('edit') || name.includes('create') || name.includes('delete') || name.includes('patch')) return 'tool-write';
+  if (name.includes('shell') || name.includes('exec') || name.includes('command') || name.includes('process') || name.includes('run')) return 'tool-shell';
+  if (name.includes('skill')) return 'tool-skill';
+  return '';
 }
 
-function createHttpLogElement(entry, isMerged = false) {
-  const details = document.createElement('details');
-  details.className = 'activity-item http-log-item';
-
-  const isSuccess = entry.status < 400;
-  const isWarn = entry.status >= 400 && entry.status < 500;
-  const statusGroup = entry.status >= 500 ? '5xx' : (entry.status >= 400 ? '4xx' : (entry.status >= 300 ? '3xx' : '2xx'));
-  const method = (entry.method || 'GET').toUpperCase();
-  const time = new Date(entry.timestamp).toLocaleTimeString();
-  const durationText = entry.duration !== undefined ? `${entry.duration}ms` : '';
-
-  // Summary row
-  const summary = document.createElement('summary');
-
-  const dot = document.createElement('div');
-  dot.className = `activity-dot ${isSuccess ? 'is-success' : (isWarn ? 'is-warn' : 'is-error')}`;
-
-  const meta = document.createElement('div');
-  meta.className = 'activity-meta';
-
-  const headerLine = document.createElement('div');
-  headerLine.className = 'activity-header-line';
-
-  if (isMerged) {
-    const flowBadge = document.createElement('span');
-    flowBadge.className = 'flow-badge badge-http';
-    flowBadge.textContent = 'HTTP';
-    headerLine.appendChild(flowBadge);
-  }
-
-  const methodBadge = document.createElement('span');
-  methodBadge.className = `http-method-badge http-method-${method}`;
-  methodBadge.textContent = method;
-
-  const statusBadge = document.createElement('span');
-  statusBadge.className = `http-status-badge http-status-${statusGroup}`;
-  statusBadge.textContent = String(entry.status);
-
-  const urlSpan = document.createElement('span');
-  urlSpan.className = 'activity-summary-text';
-  urlSpan.textContent = `${entry.url} (${entry.ip || '127.0.0.1'})`;
-
-  headerLine.appendChild(methodBadge);
-  headerLine.appendChild(statusBadge);
-  headerLine.appendChild(urlSpan);
-  meta.appendChild(headerLine);
-
-  const timeWrapper = document.createElement('div');
-  timeWrapper.style.display = 'flex';
-  timeWrapper.style.alignItems = 'center';
-  timeWrapper.style.gap = '8px';
-
-  if (durationText) {
-    const durationSpan = document.createElement('span');
-    durationSpan.style.fontSize = '10px';
-    durationSpan.style.color = 'var(--color-text-tertiary)';
-    durationSpan.textContent = durationText;
-    timeWrapper.appendChild(durationSpan);
-  }
-
-  const timeEl = document.createElement('time');
-  timeEl.className = 'activity-time';
-  timeEl.textContent = time;
-  timeWrapper.appendChild(timeEl);
-
-  const chevron = document.createElement('div');
-  chevron.className = 'activity-chevron';
-  chevron.textContent = '▶';
-
-  summary.appendChild(dot);
-  summary.appendChild(meta);
-  summary.appendChild(timeWrapper);
-  summary.appendChild(chevron);
-
-  // Details panel
-  const panel = document.createElement('div');
-  panel.className = 'activity-details-panel';
-
-  const reqSection = document.createElement('div');
-  const reqLabel = document.createElement('div');
-  reqLabel.style.fontSize = '10px';
-  reqLabel.style.fontWeight = '600';
-  reqLabel.style.color = 'var(--color-text-tertiary)';
-  reqLabel.style.textTransform = 'uppercase';
-  reqLabel.style.marginBottom = '4px';
-  reqLabel.textContent = 'Request Overview';
-
-  const reqInfo = {
-    method: entry.method,
-    url: entry.url,
-    status: entry.status,
-    clientIp: entry.ip,
-    authHeader: entry.auth || 'None',
-    userAgent: entry.userAgent || 'Unknown',
-    duration: `${entry.duration}ms`,
-    timestamp: entry.timestamp
-  };
-
-  const reqCode = document.createElement('pre');
-  reqCode.className = 'activity-code-block';
-  reqCode.textContent = JSON.stringify(reqInfo, null, 2);
-
-  reqSection.appendChild(reqLabel);
-  reqSection.appendChild(reqCode);
-  panel.appendChild(reqSection);
-
-  details.appendChild(summary);
-  details.appendChild(panel);
-  return details;
-}
-
-function renderHttpLogItem(entry, onlyMerged) {
-  // 1. Render to dedicated HTTP Requests container (unless onlyMerged is true)
-  if (onlyMerged !== true) {
-    const httpEmpty = document.getElementById('http-empty-state');
-    if (httpEmpty) httpEmpty.remove();
-    const httpContainer = document.getElementById('http-table-container');
-    if (httpContainer) {
-      const el = createHttpLogElement(entry, false);
-      if (httpContainer.firstChild) {
-        httpContainer.insertBefore(el, httpContainer.firstChild);
-      } else {
-        httpContainer.appendChild(el);
-      }
+function attachCopyButton(headerEl, textToCopy) {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'detail-copy-btn';
+  btn.textContent = 'Copy';
+  btn.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    try {
+      await navigator.clipboard.writeText(textToCopy);
+      btn.textContent = 'Copied ✓';
+      btn.classList.add('is-copied');
+      setTimeout(() => {
+        btn.textContent = 'Copy';
+        btn.classList.remove('is-copied');
+      }, 1200);
+    } catch {
+      btn.textContent = 'Failed';
+      setTimeout(() => { btn.textContent = 'Copy'; }, 1200);
     }
-  }
-
-  // 2. Render to merged All (MCP + HTTP) container (unless onlyMerged is false)
-  if (onlyMerged !== false) {
-    const allEmpty = document.getElementById('all-empty-state');
-    if (allEmpty) allEmpty.remove();
-    const allContainer = document.getElementById('all-table-container');
-    if (allContainer) {
-      const elAll = createHttpLogElement(entry, true);
-      if (allContainer.firstChild) {
-        allContainer.insertBefore(elAll, allContainer.firstChild);
-      } else {
-        allContainer.appendChild(elAll);
-      }
-    }
-  }
+  });
+  headerEl.appendChild(btn);
 }
 
-function createMcpLogElement(entry, isMerged = false) {
+function createMcpLogElement(entry) {
   const details = document.createElement('details');
   details.className = 'activity-item mcp-log-item';
 
   const isSuccess = entry.result === 'Success';
   const time = new Date(entry.timestamp).toLocaleTimeString();
   const durationText = entry.duration !== undefined ? `${entry.duration}ms` : '';
+  const httpCtx = entry.http;
+  const isToolCall = !!entry.tool;
 
   // Param summary text
   let summaryText = '';
-  if (entry.params) {
-    if (entry.params.command) summaryText = entry.params.command;
-    else if (entry.params.path) summaryText = entry.params.path;
-    else summaryText = JSON.stringify(entry.params);
+  if (isToolCall) {
+    if (entry.params) {
+      if (entry.params.command) summaryText = entry.params.command;
+      else if (entry.params.path) summaryText = entry.params.path;
+      else if (entry.params.skill) summaryText = `${entry.params.skill} (${entry.params.path || 'SKILL.md'})`;
+      else summaryText = JSON.stringify(entry.params);
+    }
+  } else {
+    summaryText = `${httpCtx?.url || '/'} (${httpCtx?.ip || '127.0.0.1'})`;
   }
-  if (summaryText.length > 80) summaryText = `${summaryText.slice(0, 80)}…`;
 
   // Summary row
   const summary = document.createElement('summary');
 
+  // Col 1: Left Fixed Lead
+  const lead = document.createElement('div');
+  lead.className = 'activity-lead';
+
   const dot = document.createElement('div');
   dot.className = `activity-dot ${isSuccess ? 'is-success' : 'is-error'}`;
+  lead.appendChild(dot);
 
-  const meta = document.createElement('div');
-  meta.className = 'activity-meta';
+  if (isToolCall) {
+    if (httpCtx) {
+      const methodBadge = document.createElement('span');
+      const method = (httpCtx.method || 'POST').toUpperCase();
+      methodBadge.className = `http-method-badge http-method-${method}`;
+      methodBadge.textContent = method;
+      lead.appendChild(methodBadge);
+    }
 
-  const headerLine = document.createElement('div');
-  headerLine.className = 'activity-header-line';
+    const toolBadge = document.createElement('span');
+    const catClass = getToolCategoryClass(entry.tool);
+    toolBadge.className = `tool-badge ${catClass}`.trim();
+    toolBadge.textContent = entry.tool || 'tool';
+    lead.appendChild(toolBadge);
+  } else {
+    // Pure HTTP request badge
+    const methodBadge = document.createElement('span');
+    const method = (httpCtx?.method || 'GET').toUpperCase();
+    methodBadge.className = `http-method-badge http-method-${method}`;
+    methodBadge.textContent = method;
+    lead.appendChild(methodBadge);
 
-  if (isMerged) {
-    const flowBadge = document.createElement('span');
-    flowBadge.className = 'flow-badge badge-mcp';
-    flowBadge.textContent = 'MCP';
-    headerLine.appendChild(flowBadge);
+    const statusBadge = document.createElement('span');
+    const status = httpCtx?.status || (isSuccess ? 200 : 500);
+    const statusGroup = status >= 500 ? '5xx' : (status >= 400 ? '4xx' : (status >= 300 ? '3xx' : '2xx'));
+    statusBadge.className = `http-status-badge http-status-${statusGroup}`;
+    statusBadge.textContent = String(status);
+    lead.appendChild(statusBadge);
   }
 
-  const toolBadge = document.createElement('span');
-  toolBadge.className = 'tool-badge';
-  toolBadge.textContent = entry.tool || 'tool';
+  // Col 2: Middle Fluid Body (Summary / Command / Path)
+  const body = document.createElement('div');
+  body.className = 'activity-body';
 
   const summarySpan = document.createElement('span');
   summarySpan.className = 'activity-summary-text';
   summarySpan.textContent = summaryText;
+  body.appendChild(summarySpan);
 
-  headerLine.appendChild(toolBadge);
-  headerLine.appendChild(summarySpan);
-  meta.appendChild(headerLine);
-
-  const timeWrapper = document.createElement('div');
-  timeWrapper.style.display = 'flex';
-  timeWrapper.style.alignItems = 'center';
-  timeWrapper.style.gap = '8px';
+  // Col 3: Right Fixed Trail (Duration + Timestamp + Chevron)
+  const trail = document.createElement('div');
+  trail.className = 'activity-trail';
 
   if (durationText) {
-    const durationSpan = document.createElement('span');
-    durationSpan.style.fontSize = '10px';
-    durationSpan.style.color = 'var(--color-text-tertiary)';
-    durationSpan.textContent = durationText;
-    timeWrapper.appendChild(durationSpan);
+    const durationPill = document.createElement('span');
+    durationPill.className = 'duration-pill';
+    durationPill.textContent = durationText;
+    trail.appendChild(durationPill);
   }
 
   const timeEl = document.createElement('time');
   timeEl.className = 'activity-time';
   timeEl.textContent = time;
-  timeWrapper.appendChild(timeEl);
+  trail.appendChild(timeEl);
 
   const chevron = document.createElement('div');
   chevron.className = 'activity-chevron';
   chevron.textContent = '▶';
+  trail.appendChild(chevron);
 
-  summary.appendChild(dot);
-  summary.appendChild(meta);
-  summary.appendChild(timeWrapper);
-  summary.appendChild(chevron);
+  summary.appendChild(lead);
+  summary.appendChild(body);
+  summary.appendChild(trail);
 
   // Details panel
   const panel = document.createElement('div');
   panel.className = 'activity-details-panel';
 
-  // Section 1: Arguments
-  const argsSection = document.createElement('div');
-  const argsLabel = document.createElement('div');
-  argsLabel.style.fontSize = '10px';
-  argsLabel.style.fontWeight = '600';
-  argsLabel.style.color = 'var(--color-text-tertiary)';
-  argsLabel.style.textTransform = 'uppercase';
-  argsLabel.style.marginBottom = '4px';
-  argsLabel.textContent = 'Arguments';
+  // Section 0: Inbound HTTP Context (Standard Code Block)
+  if (httpCtx) {
+    const httpSection = document.createElement('div');
+    const httpHeader = document.createElement('div');
+    httpHeader.className = 'detail-section-header';
 
-  const argsCode = document.createElement('pre');
-  argsCode.className = 'activity-code-block';
-  argsCode.textContent = JSON.stringify(entry.params || {}, null, 2);
+    const httpTitle = document.createElement('span');
+    httpTitle.className = 'detail-section-title';
+    httpTitle.textContent = 'Inbound HTTP Context';
+    httpHeader.appendChild(httpTitle);
 
-  argsSection.appendChild(argsLabel);
-  argsSection.appendChild(argsCode);
+    const httpPayload = {
+      method: httpCtx.method || 'POST',
+      url: httpCtx.url || '/mcp',
+      status: httpCtx.status || (isSuccess ? 200 : 500),
+      clientIp: httpCtx.ip || '127.0.0.1',
+      auth: httpCtx.auth || 'None',
+      requestId: httpCtx.requestId || ''
+    };
+    if (httpCtx.userAgent) httpPayload.userAgent = httpCtx.userAgent;
+    if (httpCtx.query) httpPayload.query = httpCtx.query;
+    if (httpCtx.headers) httpPayload.headers = httpCtx.headers;
 
-  // Section 2: Response / Error Output
-  const resSection = document.createElement('div');
-  const resLabel = document.createElement('div');
-  resLabel.style.fontSize = '10px';
-  resLabel.style.fontWeight = '600';
-  resLabel.style.color = isSuccess ? 'var(--color-text-tertiary)' : 'var(--red-300)';
-  resLabel.style.textTransform = 'uppercase';
-  resLabel.style.marginBottom = '4px';
-  resLabel.textContent = isSuccess ? 'Response Output' : 'Error Detail';
+    const httpText = JSON.stringify(httpPayload, null, 2);
+    attachCopyButton(httpHeader, httpText);
+    httpSection.appendChild(httpHeader);
 
-  const resCode = document.createElement('pre');
-  resCode.className = 'activity-code-block';
-  if (!isSuccess) {
-    resCode.style.color = 'var(--red-300)';
-    resCode.style.borderColor = 'rgba(255, 103, 100, 0.3)';
+    const httpCode = document.createElement('pre');
+    httpCode.className = 'activity-code-block';
+    httpCode.textContent = httpText;
+    httpSection.appendChild(httpCode);
+    panel.appendChild(httpSection);
   }
-  resCode.textContent = entry.error || entry.output || '(No response output)';
 
-  resSection.appendChild(resLabel);
-  resSection.appendChild(resCode);
+  // Section 1: Arguments (If tool call)
+  if (isToolCall) {
+    const argsSection = document.createElement('div');
+    const argsHeader = document.createElement('div');
+    argsHeader.className = 'detail-section-header';
 
-  panel.appendChild(argsSection);
-  panel.appendChild(resSection);
+    const argsTitle = document.createElement('span');
+    argsTitle.className = 'detail-section-title';
+    argsTitle.textContent = 'Tool Arguments';
+    argsHeader.appendChild(argsTitle);
+
+    const paramsText = JSON.stringify(entry.params || {}, null, 2);
+    attachCopyButton(argsHeader, paramsText);
+    argsSection.appendChild(argsHeader);
+
+    const argsCode = document.createElement('pre');
+    argsCode.className = 'activity-code-block';
+    argsCode.textContent = paramsText;
+    argsSection.appendChild(argsCode);
+    panel.appendChild(argsSection);
+
+    // Section 2: Response / Error Output
+    const resSection = document.createElement('div');
+    const resHeader = document.createElement('div');
+    resHeader.className = 'detail-section-header';
+
+    const resTitle = document.createElement('span');
+    resTitle.className = 'detail-section-title';
+    resTitle.style.color = isSuccess ? 'var(--color-text-tertiary)' : 'var(--red-300)';
+    resTitle.textContent = isSuccess ? 'Response Output' : 'Error Detail';
+    resHeader.appendChild(resTitle);
+
+    const outText = entry.error || entry.output || '(No response output)';
+    attachCopyButton(resHeader, outText);
+    resSection.appendChild(resHeader);
+
+    const resCode = document.createElement('pre');
+    resCode.className = `activity-code-block ${!isSuccess ? 'is-error' : ''}`.trim();
+    resCode.textContent = outText;
+
+    resSection.appendChild(resCode);
+    panel.appendChild(resSection);
+  }
 
   details.appendChild(summary);
   details.appendChild(panel);
   return details;
 }
 
-function renderMcpLogItem(entry, onlyMerged) {
-  // 1. Render to dedicated MCP Tools container (unless onlyMerged is true)
-  if (onlyMerged !== true) {
-    const mcpEmpty = document.getElementById('activity-empty-state');
-    if (mcpEmpty) mcpEmpty.remove();
-    const mcpContainer = document.getElementById('activity-table-container');
-    if (mcpContainer) {
-      const el = createMcpLogElement(entry, false);
-      if (mcpContainer.firstChild) {
-        mcpContainer.insertBefore(el, mcpContainer.firstChild);
-      } else {
-        mcpContainer.appendChild(el);
-      }
+function renderMcpLogItem(entry) {
+  const mcpEmpty = document.getElementById('activity-empty-state');
+  if (mcpEmpty) mcpEmpty.remove();
+  const mcpContainer = document.getElementById('activity-table-container');
+  if (mcpContainer) {
+    const el = createMcpLogElement(entry);
+    if (mcpContainer.firstChild) {
+      mcpContainer.insertBefore(el, mcpContainer.firstChild);
+    } else {
+      mcpContainer.appendChild(el);
+    }
+    while (mcpContainer.children.length > MAX_DOM_LOG_ITEMS) {
+      mcpContainer.lastElementChild?.remove();
     }
   }
+}
 
-  // 2. Render to merged All (MCP + HTTP) container (unless onlyMerged is false)
-  if (onlyMerged !== false) {
-    const allEmpty = document.getElementById('all-empty-state');
-    if (allEmpty) allEmpty.remove();
-    const allContainer = document.getElementById('all-table-container');
-    if (allContainer) {
-      const elAll = createMcpLogElement(entry, true);
-      if (allContainer.firstChild) {
-        allContainer.insertBefore(elAll, allContainer.firstChild);
-      } else {
-        allContainer.appendChild(elAll);
-      }
-    }
-  }
+function createTunnelLogElement(entry) {
+  const details = document.createElement('details');
+  details.className = 'activity-item tunnel-log-item';
+
+  const level = (entry.level || 'info').toLowerCase();
+  const isErr = level === 'error';
+  const isWarn = level === 'warn';
+  const time = new Date(entry.timestamp).toLocaleTimeString();
+
+  // Summary row: Lead (Fixed) + Body (Fluid) + Trail (Fixed)
+  const summary = document.createElement('summary');
+
+  const lead = document.createElement('div');
+  lead.className = 'activity-lead';
+
+  const dot = document.createElement('div');
+  dot.className = `activity-dot ${isErr ? 'is-error' : (isWarn ? 'is-warn' : 'is-success')}`;
+  lead.appendChild(dot);
+
+  const levelBadge = document.createElement('span');
+  levelBadge.className = `tunnel-level-badge tunnel-level-${level}`;
+  levelBadge.textContent = level.toUpperCase();
+  lead.appendChild(levelBadge);
+
+  const body = document.createElement('div');
+  body.className = 'activity-body';
+
+  const msgSpan = document.createElement('span');
+  msgSpan.className = 'activity-summary-text';
+  msgSpan.textContent = entry.message || '';
+  body.appendChild(msgSpan);
+
+  const trail = document.createElement('div');
+  trail.className = 'activity-trail';
+
+  const timeEl = document.createElement('time');
+  timeEl.className = 'activity-time';
+  timeEl.textContent = time;
+  trail.appendChild(timeEl);
+
+  const chevron = document.createElement('div');
+  chevron.className = 'activity-chevron';
+  chevron.textContent = '▶';
+  trail.appendChild(chevron);
+
+  summary.appendChild(lead);
+  summary.appendChild(body);
+  summary.appendChild(trail);
+
+  // Details panel
+  const panel = document.createElement('div');
+  panel.className = 'activity-details-panel';
+
+  const detailText = entry.detail ? JSON.stringify(entry.detail, null, 2) : (entry.message || '(No extra details)');
+
+  const detailSection = document.createElement('div');
+  const detailHeader = document.createElement('div');
+  detailHeader.className = 'detail-section-header';
+
+  const detailTitle = document.createElement('span');
+  detailTitle.className = 'detail-section-title';
+  detailTitle.textContent = 'Event Details';
+  detailHeader.appendChild(detailTitle);
+
+  attachCopyButton(detailHeader, detailText);
+  detailSection.appendChild(detailHeader);
+
+  const detailCode = document.createElement('pre');
+  detailCode.className = `activity-code-block ${isErr ? 'is-error' : ''}`.trim();
+  detailCode.textContent = detailText;
+  detailSection.appendChild(detailCode);
+
+  panel.appendChild(detailSection);
+  details.appendChild(summary);
+  details.appendChild(panel);
+  return details;
 }
 
 function renderTunnelLogItem(entry) {
@@ -2091,95 +2674,18 @@ function renderTunnelLogItem(entry) {
   const container = document.getElementById('tunnel-table-container');
   if (!container) return;
 
-  const details = document.createElement('details');
-  details.className = 'activity-item tunnel-log-item';
-
-  const level = (entry.level || 'info').toLowerCase();
-  const isErr = level === 'error';
-  const isWarn = level === 'warn';
-  const time = new Date(entry.timestamp).toLocaleTimeString();
-
-  // Summary row
-  const summary = document.createElement('summary');
-
-  const dot = document.createElement('div');
-  dot.className = `activity-dot ${isErr ? 'is-error' : (isWarn ? 'is-warn' : 'is-success')}`;
-
-  const meta = document.createElement('div');
-  meta.className = 'activity-meta';
-
-  const headerLine = document.createElement('div');
-  headerLine.className = 'activity-header-line';
-
-  const levelBadge = document.createElement('span');
-  levelBadge.className = `tunnel-level-badge tunnel-level-${level}`;
-  levelBadge.textContent = level.toUpperCase();
-
-  const msgSpan = document.createElement('span');
-  msgSpan.className = 'activity-summary-text';
-  msgSpan.textContent = entry.message || '';
-
-  headerLine.appendChild(levelBadge);
-  headerLine.appendChild(msgSpan);
-  meta.appendChild(headerLine);
-
-  const timeWrapper = document.createElement('div');
-  timeWrapper.style.display = 'flex';
-  timeWrapper.style.alignItems = 'center';
-  timeWrapper.style.gap = '8px';
-
-  const timeEl = document.createElement('time');
-  timeEl.className = 'activity-time';
-  timeEl.textContent = time;
-  timeWrapper.appendChild(timeEl);
-
-  const chevron = document.createElement('div');
-  chevron.className = 'activity-chevron';
-  chevron.textContent = '▶';
-
-  summary.appendChild(dot);
-  summary.appendChild(meta);
-  summary.appendChild(timeWrapper);
-  summary.appendChild(chevron);
-
-  // Details panel
-  const panel = document.createElement('div');
-  panel.className = 'activity-details-panel';
-
-  const detailSection = document.createElement('div');
-  const detailLabel = document.createElement('div');
-  detailLabel.style.fontSize = '10px';
-  detailLabel.style.fontWeight = '600';
-  detailLabel.style.color = isErr ? 'var(--red-300)' : 'var(--color-text-tertiary)';
-  detailLabel.style.textTransform = 'uppercase';
-  detailLabel.style.marginBottom = '4px';
-  detailLabel.textContent = 'Event Details';
-
-  const detailCode = document.createElement('pre');
-  detailCode.className = 'activity-code-block';
-  detailCode.textContent = entry.detail ? JSON.stringify(entry.detail, null, 2) : (entry.message || '(No extra details)');
-
-  detailSection.appendChild(detailLabel);
-  detailSection.appendChild(detailCode);
-  panel.appendChild(detailSection);
-
-  details.appendChild(summary);
-  details.appendChild(panel);
-
+  const details = createTunnelLogElement(entry);
   if (container.firstChild) {
     container.insertBefore(details, container.firstChild);
   } else {
     container.appendChild(details);
   }
+  while (container.children.length > MAX_DOM_LOG_ITEMS) {
+    container.lastElementChild?.remove();
+  }
 }
 
-function renderRuntimeLogItem(entry) {
-  const emptyState = document.getElementById('runtime-empty-state');
-  if (emptyState) emptyState.remove();
-
-  const container = document.getElementById('runtime-table-container');
-  if (!container) return;
-
+function createRuntimeLogElement(entry) {
   const details = document.createElement('details');
   details.className = 'activity-item runtime-log-item';
 
@@ -2189,78 +2695,151 @@ function renderRuntimeLogItem(entry) {
   const time = new Date(entry.timestamp).toLocaleTimeString();
   const source = entry.source || 'App';
 
-  // Summary row
+  // Summary row: Lead (Fixed) + Body (Fluid) + Trail (Fixed)
   const summary = document.createElement('summary');
+
+  const lead = document.createElement('div');
+  lead.className = 'activity-lead';
 
   const dot = document.createElement('div');
   dot.className = `activity-dot ${isErr ? 'is-error' : (isWarn ? 'is-warn' : 'is-success')}`;
-
-  const meta = document.createElement('div');
-  meta.className = 'activity-meta';
-
-  const headerLine = document.createElement('div');
-  headerLine.className = 'activity-header-line';
+  lead.appendChild(dot);
 
   const sourceBadge = document.createElement('span');
   sourceBadge.className = `tunnel-level-badge tunnel-level-${level}`;
   sourceBadge.textContent = source.toUpperCase();
+  lead.appendChild(sourceBadge);
+
+  const body = document.createElement('div');
+  body.className = 'activity-body';
 
   const msgSpan = document.createElement('span');
   msgSpan.className = 'activity-summary-text';
   msgSpan.textContent = entry.message || '';
+  body.appendChild(msgSpan);
 
-  headerLine.appendChild(sourceBadge);
-  headerLine.appendChild(msgSpan);
-  meta.appendChild(headerLine);
-
-  const timeWrapper = document.createElement('div');
-  timeWrapper.style.display = 'flex';
-  timeWrapper.style.alignItems = 'center';
-  timeWrapper.style.gap = '8px';
+  const trail = document.createElement('div');
+  trail.className = 'activity-trail';
 
   const timeEl = document.createElement('time');
   timeEl.className = 'activity-time';
   timeEl.textContent = time;
-  timeWrapper.appendChild(timeEl);
+  trail.appendChild(timeEl);
 
   const chevron = document.createElement('div');
   chevron.className = 'activity-chevron';
   chevron.textContent = '▶';
+  trail.appendChild(chevron);
 
-  summary.appendChild(dot);
-  summary.appendChild(meta);
-  summary.appendChild(timeWrapper);
-  summary.appendChild(chevron);
+  summary.appendChild(lead);
+  summary.appendChild(body);
+  summary.appendChild(trail);
 
   // Details panel
   const panel = document.createElement('div');
   panel.className = 'activity-details-panel';
 
+  const detailText = entry.detail ? JSON.stringify(entry.detail, null, 2) : (entry.message || '(No extra details)');
+
   const detailSection = document.createElement('div');
-  const detailLabel = document.createElement('div');
-  detailLabel.style.fontSize = '10px';
-  detailLabel.style.fontWeight = '600';
-  detailLabel.style.color = isErr ? 'var(--red-300)' : 'var(--color-text-tertiary)';
-  detailLabel.style.textTransform = 'uppercase';
-  detailLabel.style.marginBottom = '4px';
-  detailLabel.textContent = 'Runtime Details';
+  const detailHeader = document.createElement('div');
+  detailHeader.className = 'detail-section-header';
+
+  const detailTitle = document.createElement('span');
+  detailTitle.className = 'detail-section-title';
+  detailTitle.textContent = 'Runtime Details';
+  detailHeader.appendChild(detailTitle);
+
+  attachCopyButton(detailHeader, detailText);
+  detailSection.appendChild(detailHeader);
 
   const detailCode = document.createElement('pre');
-  detailCode.className = 'activity-code-block';
-  detailCode.textContent = entry.detail ? JSON.stringify(entry.detail, null, 2) : (entry.message || '(No extra details)');
-
-  detailSection.appendChild(detailLabel);
+  detailCode.className = `activity-code-block ${isErr ? 'is-error' : ''}`.trim();
+  detailCode.textContent = detailText;
   detailSection.appendChild(detailCode);
-  panel.appendChild(detailSection);
 
+  panel.appendChild(detailSection);
   details.appendChild(summary);
   details.appendChild(panel);
+  return details;
+}
 
+function renderRuntimeLogItem(entry) {
+  const emptyState = document.getElementById('runtime-empty-state');
+  if (emptyState) emptyState.remove();
+
+  const container = document.getElementById('runtime-table-container');
+  if (!container) return;
+
+  const details = createRuntimeLogElement(entry);
   if (container.firstChild) {
     container.insertBefore(details, container.firstChild);
   } else {
     container.appendChild(details);
   }
+  while (container.children.length > MAX_DOM_LOG_ITEMS) {
+    container.lastElementChild?.remove();
+  }
+}
+
+function renderRecentMcpLogs() {
+  const mcpContainer = document.getElementById('activity-table-container');
+  if (!mcpContainer) return;
+  mcpContainer.replaceChildren();
+  if (mcpLogs.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'activity-empty';
+    empty.id = 'activity-empty-state';
+    empty.textContent = 'Waiting for AI assistant MCP requests...';
+    mcpContainer.appendChild(empty);
+    return;
+  }
+  const fragment = document.createDocumentFragment();
+  const slice = mcpLogs.slice(-MAX_DOM_LOG_ITEMS).reverse();
+  for (const entry of slice) {
+    fragment.appendChild(createMcpLogElement(entry));
+  }
+  mcpContainer.appendChild(fragment);
+}
+
+function renderRecentTunnelLogs() {
+  const container = document.getElementById('tunnel-table-container');
+  if (!container) return;
+  container.replaceChildren();
+  if (tunnelLogs.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'activity-empty';
+    empty.id = 'tunnel-empty-state';
+    empty.textContent = 'Waiting for tunnel events...';
+    container.appendChild(empty);
+    return;
+  }
+  const fragment = document.createDocumentFragment();
+  const slice = tunnelLogs.slice(-MAX_DOM_LOG_ITEMS).reverse();
+  for (const entry of slice) {
+    fragment.appendChild(createTunnelLogElement(entry));
+  }
+  container.appendChild(fragment);
+}
+
+function renderRecentRuntimeLogs() {
+  const container = document.getElementById('runtime-table-container');
+  if (!container) return;
+  container.replaceChildren();
+  if (runtimeLogs.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'activity-empty';
+    empty.id = 'runtime-empty-state';
+    empty.textContent = 'Waiting for runtime events...';
+    container.appendChild(empty);
+    return;
+  }
+  const fragment = document.createDocumentFragment();
+  const slice = runtimeLogs.slice(-MAX_DOM_LOG_ITEMS).reverse();
+  for (const entry of slice) {
+    fragment.appendChild(createRuntimeLogElement(entry));
+  }
+  container.appendChild(fragment);
 }
 
 // Redact sensitive patterns for Safe Log export (tokens, keys, secrets)
@@ -2285,16 +2864,16 @@ async function exportSafeLog() {
 
   const exportPayload = {
     exportedAt: new Date().toISOString(),
-    mcpInvocations: mcpLogs.map(l => ({
+    mcpRequests: mcpLogs.map(l => ({
       ...l,
       params: safeJsonParse(redactSafeText(JSON.stringify(l.params || {})), l.params),
       output: redactSafeText(l.output || ''),
-      error: redactSafeText(l.error || '')
-    })),
-    httpRequests: httpLogs.map(l => ({
-      ...l,
-      url: redactSafeText(l.url),
-      ip: redactSafeText(l.ip)
+      error: redactSafeText(l.error || ''),
+      http: l.http ? {
+        ...l.http,
+        url: redactSafeText(l.http.url),
+        ip: redactSafeText(l.http.ip)
+      } : null
     })),
     tunnelLogs: tunnelLogs.map(l => ({
       ...l,
@@ -2331,22 +2910,14 @@ async function exportSafeLog() {
   }
 }
 
-function clearAllLogs() {
+async function clearAllLogs() {
   const clearBtn = document.getElementById('clear-all-logs-btn');
   mcpLogs.length = 0;
-  httpLogs.length = 0;
   tunnelLogs.length = 0;
   runtimeLogs.length = 0;
-
-  const allContainer = document.getElementById('all-table-container');
-  if (allContainer) {
-    allContainer.replaceChildren();
-    const empty = document.createElement('div');
-    empty.className = 'activity-empty';
-    empty.id = 'all-empty-state';
-    empty.textContent = 'Logs cleared. Waiting for new activity...';
-    allContainer.appendChild(empty);
-  }
+  pendingLogsRender.mcp = false;
+  pendingLogsRender.tunnel = false;
+  pendingLogsRender.runtime = false;
 
   const tableContainer = document.getElementById('activity-table-container');
   if (tableContainer) {
@@ -2356,16 +2927,6 @@ function clearAllLogs() {
     empty.id = 'activity-empty-state';
     empty.textContent = 'Logs cleared. Waiting for new activity...';
     tableContainer.appendChild(empty);
-  }
-
-  const httpContainer = document.getElementById('http-table-container');
-  if (httpContainer) {
-    httpContainer.replaceChildren();
-    const empty = document.createElement('div');
-    empty.className = 'activity-empty';
-    empty.id = 'http-empty-state';
-    empty.textContent = 'HTTP request logs cleared.';
-    httpContainer.appendChild(empty);
   }
 
   const tunnelContainer = document.getElementById('tunnel-table-container');
@@ -2388,9 +2949,15 @@ function clearAllLogs() {
     runtimeContainer.appendChild(empty);
   }
 
-  updateAllMetrics();
   updateMcpMetrics();
-  updateHttpMetrics();
+
+  try {
+    if (window.api && typeof window.api.clearLogs === 'function') {
+      await window.api.clearLogs();
+    }
+  } catch (err) {
+    console.error('Failed to clear persisted logs in main process:', err);
+  }
 
   if (clearBtn) {
     const originalText = clearBtn.textContent;

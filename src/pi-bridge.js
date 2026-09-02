@@ -1,8 +1,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { execFileSync } = require('child_process');
-const { pathToFileURL } = require('url');
+const { execFileSync, fork } = require('child_process');
 const { randomUUID } = require('crypto');
 const { z } = require('zod');
 
@@ -12,13 +11,6 @@ const MAX_ACTIVATED_SKILL_BYTES = 512 * 1024;
 // Aura already provides these capabilities itself. Re-exporting Pi's copies would
 // create duplicate filesystem/shell authority and weaken Aura's existing policy boundary.
 const AURA_OWNED_TOOLS = new Set([
-  'read',
-  'bash',
-  'powershell',
-  'write',
-  'grep',
-  'find',
-  'ls',
   'request_capabilities'
 ]);
 
@@ -98,14 +90,89 @@ function executableCandidates() {
   return candidates;
 }
 
+function parseNodeVersion(value) {
+  const match = String(value || '').trim().match(/^v?(\d+)\.(\d+)\.(\d+)/);
+  return match ? match.slice(1, 4).map(Number) : null;
+}
+
+function isCompatiblePiNode(version) {
+  const parsed = parseNodeVersion(version);
+  if (!parsed) return false;
+  const [major, minor, patch] = parsed;
+  return major > 22 || (major === 22 && (minor > 19 || (minor === 19 && patch >= 0)));
+}
+
+function inspectNodeRuntime(nodePath) {
+  if (!nodePath || !fs.existsSync(nodePath)) return null;
+  try {
+    const version = execFileSync(nodePath, ['-p', 'process.versions.node'], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore']
+    }).trim();
+    if (!isCompatiblePiNode(version)) return null;
+    return { nodePath: fs.realpathSync(nodePath), nodeVersion: version };
+  } catch {
+    return null;
+  }
+}
+
+function compatibleNodeRuntime(candidate, packageRoot) {
+  const candidates = [];
+  const add = value => {
+    if (!value) return;
+    const resolved = path.resolve(expandHome(value));
+    if (!candidates.includes(resolved)) candidates.push(resolved);
+  };
+
+  if (candidate && fs.existsSync(candidate) && !fs.statSync(candidate).isDirectory()) {
+    add(path.join(path.dirname(candidate), process.platform === 'win32' ? 'node.exe' : 'node'));
+  }
+
+  const marker = `${path.sep}lib${path.sep}node_modules${path.sep}`;
+  const markerIndex = packageRoot.indexOf(marker);
+  if (markerIndex > 0) {
+    const nodePrefix = packageRoot.slice(0, markerIndex);
+    add(path.join(nodePrefix, 'bin', process.platform === 'win32' ? 'node.exe' : 'node'));
+  }
+
+  try {
+    const command = process.platform === 'win32' ? 'where' : 'which';
+    const output = execFileSync(command, ['node'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+    for (const line of output.split(/\r?\n/)) add(line.trim());
+  } catch {}
+
+  const nvmVersions = path.join(os.homedir(), '.nvm', 'versions', 'node');
+  if (fs.existsSync(nvmVersions)) {
+    const versions = fs.readdirSync(nvmVersions, { withFileTypes: true })
+      .filter(entry => entry.isDirectory())
+      .map(entry => entry.name)
+      .sort()
+      .reverse();
+    for (const version of versions) {
+      add(path.join(nvmVersions, version, 'bin', process.platform === 'win32' ? 'node.exe' : 'node'));
+    }
+  }
+
+  for (const nodePath of candidates) {
+    const runtime = inspectNodeRuntime(nodePath);
+    if (runtime) return runtime;
+  }
+  return null;
+}
+
 function locatePiPackage() {
+  let foundWithoutRuntime = null;
   for (const candidate of executableCandidates()) {
     if (!fs.existsSync(candidate)) continue;
     try {
       const stat = fs.statSync(candidate);
       const resolvedCandidate = stat.isDirectory() ? candidate : fs.realpathSync(candidate);
       const found = findPackageRoot(resolvedCandidate);
-      if (found) return found;
+      if (found) {
+        const runtime = compatibleNodeRuntime(candidate, found.root);
+        if (runtime) return { ...found, ...runtime };
+        foundWithoutRuntime ||= found;
+      }
     } catch {
       // Try the next candidate.
     }
@@ -127,14 +194,18 @@ function locatePiPackage() {
       if (!fs.existsSync(packagePath)) continue;
       try {
         const found = findPackageRoot(packagePath);
-        if (found) return found;
+        if (found) {
+          const runtime = compatibleNodeRuntime(null, found.root);
+          if (runtime) return { ...found, ...runtime };
+          foundWithoutRuntime ||= found;
+        }
       } catch {
         // Continue.
       }
     }
   }
 
-  return null;
+  return foundWithoutRuntime;
 }
 
 function packageImportEntry(location) {
@@ -288,15 +359,27 @@ function toolResultText(result) {
 }
 
 class PiBridge {
-  constructor({ getFsRoot = () => '~/', getAllowPiModelTools = () => false, onStatus = null } = {}) {
+  constructor({
+    getFsRoot = () => '~/',
+    getAllowPiModelTools = () => false,
+    getShellPolicy = () => 'unrestricted',
+    getShellAllowlist = () => [],
+    getShellDenylist = () => [],
+    onStatus = null
+  } = {}) {
     this.getFsRoot = getFsRoot;
     this.getAllowPiModelTools = getAllowPiModelTools;
+    this.getShellPolicy = getShellPolicy;
+    this.getShellAllowlist = getShellAllowlist;
+    this.getShellDenylist = getShellDenylist;
     this.onStatus = onStatus;
     this.available = false;
     this.initError = null;
     this.packageRoot = null;
     this.version = null;
-    this.session = null;
+    this.nodeVersion = null;
+    this.worker = null;
+    this.pending = new Map();
     this.tools = new Map();
     this.skills = new Map();
     this.activeToolNames = new Set();
@@ -334,56 +417,151 @@ class PiBridge {
   }
 
   validateToolAuthority(name, args) {
-    if (name === 'edit') {
+    if (name === 'read' || name === 'edit' || name === 'write') {
       this.resolveToolPathWithinRoot(args?.path);
+      return;
+    }
+    if ((name === 'grep' || name === 'find' || name === 'ls') && args?.path) {
+      this.resolveToolPathWithinRoot(args.path);
+      return;
+    }
+    if (name === 'bash' || name === 'powershell') {
+      const command = String(args?.command || '').trim();
+      const baseCmd = command.split(/\s+/)[0];
+      const policy = this.getShellPolicy() || 'unrestricted';
+      const allowlist = Array.isArray(this.getShellAllowlist()) ? this.getShellAllowlist() : [];
+      const denylist = Array.isArray(this.getShellDenylist()) ? this.getShellDenylist() : [];
+      if (policy === 'denylist' && denylist.includes(baseCmd)) {
+        throw new Error(`Command '${baseCmd}' is explicitly blocked by Aura's denylist.`);
+      }
+      if (policy === 'allowlist' && !allowlist.includes(baseCmd)) {
+        throw new Error(`Command '${baseCmd}' is not in Aura's shell allowlist.`);
+      }
     }
   }
 
+  _rejectPending(error) {
+    const failure = error instanceof Error ? error : new Error(String(error));
+    for (const pending of this.pending.values()) {
+      try { pending.signal?.removeEventListener('abort', pending.abortHandler); } catch {}
+      pending.reject(failure);
+    }
+    this.pending.clear();
+  }
+
+  _handleWorkerMessage(message) {
+    if (!message || typeof message !== 'object') return;
+    if (message.type === 'status') {
+      this.status(message.level || 'info', message.message || 'Pi worker status', message.detail || null);
+      return;
+    }
+    const pending = this.pending.get(message.id);
+    if (!pending) return;
+    if (message.type === 'update') {
+      if (typeof pending.onUpdate === 'function') pending.onUpdate(message.update);
+      return;
+    }
+    if (message.type !== 'response') return;
+    this.pending.delete(message.id);
+    try { pending.signal?.removeEventListener('abort', pending.abortHandler); } catch {}
+    if (message.ok) pending.resolve(message.result);
+    else pending.reject(new Error(message.error || 'Pi worker request failed.'));
+  }
+
+  _request(method, params = {}, { signal, onUpdate } = {}) {
+    if (!this.worker || !this.worker.connected) {
+      return Promise.reject(new Error('Pi worker is not running.'));
+    }
+    const id = randomUUID();
+    return new Promise((resolve, reject) => {
+      const abortHandler = () => {
+        this.pending.delete(id);
+        try { this.worker?.send({ type: 'cancel', id }); } catch {}
+        reject(new Error(`Pi tool request '${method}' was aborted.`));
+      };
+      if (signal?.aborted) {
+        abortHandler();
+        return;
+      }
+      if (signal) signal.addEventListener('abort', abortHandler, { once: true });
+      this.pending.set(id, { resolve, reject, onUpdate, signal, abortHandler });
+      try {
+        this.worker.send({ type: 'request', id, method, params });
+      } catch (error) {
+        this.pending.delete(id);
+        if (signal) signal.removeEventListener('abort', abortHandler);
+        reject(error);
+      }
+    });
+  }
+
   async initialize() {
-    if (this.available || this.session) return this;
+    if (this.available || this.worker) return this;
 
     try {
       const location = locatePiPackage();
       if (!location) throw new Error('Pi Coding Agent installation was not found.');
+      if (!location.nodePath) {
+        throw new Error('Pi requires Node >=22.19.0, but Aura could not locate a compatible external Node runtime.');
+      }
 
       this.packageRoot = location.root;
       this.version = location.manifest.version || 'unknown';
-      const sdk = await import(pathToFileURL(packageImportEntry(location)).href);
+      this.nodeVersion = location.nodeVersion || null;
       const cwd = this.resolvedFsRoot();
       if (!fs.existsSync(cwd) || !fs.statSync(cwd).isDirectory()) {
         throw new Error(`Aura filesystem root is not an existing directory: ${cwd}`);
       }
 
-      const sessionManager = sdk.SessionManager?.inMemory
-        ? sdk.SessionManager.inMemory(cwd)
-        : undefined;
-      const created = await sdk.createAgentSession({ cwd, sessionManager });
-      this.session = created.session;
-
-      // Resource-discovery hooks add package/extension skills without starting an LLM turn.
-      if (typeof this.session.extendResourcesFromExtensions === 'function') {
-        try {
-          await this.session.extendResourcesFromExtensions('startup');
-        } catch (error) {
-          this.status('warn', 'Pi extension skill discovery was partial.', { error: error.message });
-        }
+      const workerPath = __dirname.includes(`${path.sep}app.asar${path.sep}`)
+        ? path.join(process.resourcesPath, 'app.asar.unpacked', 'src', 'pi-worker.cjs')
+        : path.join(__dirname, 'pi-worker.cjs');
+      if (!fs.existsSync(workerPath)) {
+        throw new Error(`Pi worker script not found: ${workerPath}`);
       }
+      this.worker = fork(workerPath, [], {
+        execPath: location.nodePath,
+        cwd,
+        env: { ...process.env },
+        stdio: ['ignore', 'ignore', 'pipe', 'ipc']
+      });
+      this.worker.on('message', message => this._handleWorkerMessage(message));
+      this.worker.stderr?.on('data', chunk => {
+        const text = String(chunk || '').trim();
+        if (text) this.status('warn', 'Pi worker stderr', { text: text.slice(0, 2000) });
+      });
+      this.worker.on('error', error => {
+        this._rejectPending(error);
+        this.status('warn', 'Pi worker error.', { error: error.message });
+      });
+      this.worker.on('exit', (code, signal) => {
+        const wasActive = this.available;
+        this._rejectPending(new Error(`Pi worker exited (${signal || code || 'unknown'}).`));
+        this.worker = null;
+        this.available = false;
+        if (wasActive && code !== 0) {
+          this.status('warn', 'Pi worker exited unexpectedly.', { code, signal });
+        }
+      });
 
-      for (const info of this.session.getAllTools()) {
+      const result = await this._request('initialize', {
+        packageEntry: packageImportEntry(location),
+        cwd
+      });
+
+      for (const info of result?.tools || []) {
         if (AURA_OWNED_TOOLS.has(info.name)) continue;
-        const definition = this.session.getToolDefinition(info.name);
-        if (!definition) continue;
         this.tools.set(info.name, {
           name: info.name,
-          description: info.description || definition.description || '',
-          parameters: definition.parameters || { type: 'object', properties: {} },
+          description: info.description || '',
+          parameters: info.parameters || { type: 'object', properties: {} },
           sourceInfo: info.sourceInfo,
           category: classifyTool(info.name),
           usesPiDefaultModel: PI_DEFAULT_MODEL_TOOLS.has(info.name)
         });
       }
 
-      for (const skill of this.session.resourceLoader.getSkills().skills) {
+      for (const skill of result?.skills || []) {
         if (!skill?.name || !skill?.filePath || !skill?.baseDir) continue;
         this.skills.set(skill.name, {
           name: skill.name,
@@ -395,23 +573,21 @@ class PiBridge {
         });
       }
 
-      // The bridge only uses Pi as a registry/executor. Clearing the AgentSession's
-      // active tools prevents accidental agent-loop use and does not call a model.
-      this.session.setActiveToolsByName([]);
       this.activeToolNames.clear();
       this.available = true;
       this.status('info', `Pi bridge ready (${this.tools.size} tools, ${this.skills.size} skills).`, {
         version: this.version,
         packageRoot: this.packageRoot,
-        cwd
+        cwd,
+        externalNode: location.nodePath,
+        nodeVersion: this.nodeVersion
       });
       return this;
     } catch (error) {
       this.initError = error instanceof Error ? error : new Error(String(error));
       this.available = false;
       this.status('warn', 'Pi bridge unavailable.', { error: this.initError.message });
-      try { this.session?.dispose(); } catch {}
-      this.session = null;
+      this.dispose();
       return this;
     }
   }
@@ -440,21 +616,22 @@ class PiBridge {
     ) : [];
 
     return [
-      `Pi ${this.version} capabilities. Tools are inactive until request_capabilities enables them.`,
-      'Aura calls tool execute() directly; it never calls Pi session.prompt(), so registry/Skill use does not spend Pi default-model tokens.',
+      `Pi ${this.version} capabilities. Only tools selected in Aura Settings are exposed and enabled for the current MCP session.`,
+      'Aura executes Pi tools in Pi\'s compatible external Node runtime; it never calls Pi session.prompt(), so registry/Skill use does not spend Pi default-model tokens.',
       ...toolLines,
       ...skillLines
     ].join('\n');
   }
 
-  enableTools(requestedNames = [], allowedNames = null) {
+  async enableTools(requestedNames = [], allowedNames = null) {
     const result = { enabled: [], alreadyActive: [], blocked: [], unknown: [] };
-    if (!this.available || !this.session) {
+    if (!this.available || !this.worker) {
       for (const name of requestedNames) result.unknown.push(String(name));
       return result;
     }
 
     const allowed = Array.isArray(allowedNames) ? new Set(allowedNames) : null;
+    const nextActive = new Set(this.activeToolNames);
     for (const rawName of requestedNames) {
       const name = String(rawName || '').trim();
       if (!name || !this.tools.has(name)) {
@@ -470,15 +647,18 @@ class PiBridge {
         result.blocked.push({ name, reason: 'May invoke the Pi default model; Aura piAllowModelTools is disabled.' });
         continue;
       }
-      if (this.activeToolNames.has(name)) {
+      if (nextActive.has(name)) {
         result.alreadyActive.push(name);
         continue;
       }
-      this.activeToolNames.add(name);
+      nextActive.add(name);
       result.enabled.push(name);
     }
 
-    this.session.setActiveToolsByName(Array.from(this.activeToolNames));
+    if (result.enabled.length > 0) {
+      await this._request('setActiveTools', { names: Array.from(nextActive) });
+      this.activeToolNames = nextActive;
+    }
     return result;
   }
 
@@ -543,31 +723,34 @@ class PiBridge {
   }
 
   async executeTool(name, args = {}, { signal, onUpdate } = {}) {
-    if (!this.available || !this.session) throw new Error('Pi bridge is unavailable.');
-    if (!this.activeToolNames.has(name)) throw new Error(`Pi tool '${name}' is not active. Call request_capabilities first.`);
-
-    const tool = this.session.state.tools.find(candidate => candidate.name === name);
-    if (!tool) throw new Error(`Pi tool '${name}' is not present in the active Pi tool set.`);
+    if (!this.available || !this.worker) throw new Error('Pi bridge is unavailable.');
+    if (!this.activeToolNames.has(name)) {
+      throw new Error(`Capability '${name}' is not enabled in Aura Settings.`);
+    }
 
     this.validateToolAuthority(name, args);
-    const result = await tool.execute(randomUUID(), args, signal, onUpdate);
-    return {
-      content: Array.isArray(result?.content) ? result.content : [{ type: 'text', text: String(result ?? '') }],
-      isError: result?.isError === true,
-      logText: toolResultText(result)
-    };
+    return this._request('execute', { name, args }, { signal, onUpdate });
   }
 
   dispose() {
-    try { this.session?.dispose(); } catch {}
-    this.session = null;
+    const worker = this.worker;
+    this.worker = null;
     this.available = false;
+    this._rejectPending(new Error('Pi bridge disposed.'));
+    if (worker) {
+      try {
+        if (worker.connected) worker.send({ type: 'request', id: randomUUID(), method: 'shutdown', params: {} });
+      } catch {}
+      const timer = setTimeout(() => {
+        try { if (!worker.killed) worker.kill(); } catch {}
+      }, 750);
+      timer.unref?.();
+    }
     this.tools.clear();
     this.skills.clear();
     this.activeToolNames.clear();
   }
 }
-
 module.exports = {
   PiBridge,
   jsonSchemaToZod,

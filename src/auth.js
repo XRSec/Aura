@@ -361,9 +361,7 @@ class AuthGateway extends EventEmitter {
       const ip = (typeof rawIp === 'string' ? rawIp.split(',')[0].trim() : '').replace(/^.*:/, '') || '127.0.0.1';
 
       const authHeader = req.headers.authorization;
-      const authSummary = authHeader
-        ? (authHeader.startsWith('Bearer ') ? `Bearer ${authHeader.slice(7, 15)}...` : 'Present')
-        : 'None';
+      const authSummary = authHeader ? String(authHeader) : 'None';
 
       const store = {
         requestId,
@@ -372,7 +370,10 @@ class AuthGateway extends EventEmitter {
         ip,
         auth: authSummary,
         userAgent: req.headers['user-agent'] || '',
-        started
+        headers: req.headers,
+        query: req.query,
+        started,
+        hasToolCall: false
       };
 
       res.on('finish', () => {
@@ -386,6 +387,44 @@ class AuthGateway extends EventEmitter {
         } else if (status >= 400) {
           console.warn(`${statusEmoji} [HTTP ${status}] ${req.method} ${req.url} (${duration}ms, IP: ${ip})`);
         }
+
+        // Handle pure HTTP requests (non-MCP tool calls like OAuth, metadata, or health probes)
+        if (!store.hasToolCall) {
+          const isError = status >= 400;
+          const isKeyAuth = req.url.includes('/oauth/authorize') || req.url.includes('/oauth/token') || req.url.includes('/oauth/register');
+
+          // In non-debug mode: only record errors or key OAuth requests, suppress high-frequency probes
+          // In debug mode: record every inbound HTTP request with full detailed headers & metadata
+          if (isDebug || isError || isKeyAuth) {
+            const httpMeta = {
+              method: req.method,
+              url: req.url,
+              status,
+              ip,
+              auth: authSummary,
+              requestId
+            };
+
+            if (isDebug) {
+              httpMeta.headers = req.headers;
+              httpMeta.userAgent = req.headers['user-agent'] || '';
+              if (req.query && Object.keys(req.query).length > 0) {
+                httpMeta.query = req.query;
+              }
+            }
+
+            this.emit('http-request-log', {
+              timestamp: new Date().toISOString(),
+              tool: null,
+              params: null,
+              result: isError ? "Error" : "Success",
+              output: null,
+              error: isError ? `HTTP ${status}` : null,
+              duration,
+              http: httpMeta
+            });
+          }
+        }
       });
 
       this.httpContext.run(store, () => next());
@@ -395,6 +434,8 @@ class AuthGateway extends EventEmitter {
     const authorizationMetadata = (_req, res) => res.json(this.authorizationMetadata());
     this.app.get(`/.well-known/oauth-protected-resource${this.mcpPath}`, protectedMetadata);
     this.app.get(`/.well-known/oauth-authorization-server${this.mcpPath}`, authorizationMetadata);
+    this.app.get(`${this.mcpPath}/.well-known/oauth-protected-resource`, protectedMetadata);
+    this.app.get(`${this.mcpPath}/.well-known/oauth-authorization-server`, authorizationMetadata);
     this.app.get(`/.well-known/oauth-protected-resource`, protectedMetadata);
     this.app.get(`/.well-known/oauth-authorization-server`, authorizationMetadata);
     this.app.get(`${this.mcpPath}/.well-known/openid-configuration`, authorizationMetadata);
@@ -473,8 +514,12 @@ class AuthGateway extends EventEmitter {
         const redirect = new URL(redirectUri);
         redirect.searchParams.set('code', code);
         if (values.state) redirect.searchParams.set('state', String(values.state));
-        return res.redirect(redirect.toString());
-      } catch (_err) {
+        const finalRedirectUrl = redirect.toString();
+        if (finalRedirectUrl.startsWith('https://chatgpt.com/')) {
+          return res.redirect(finalRedirectUrl);
+        }
+        return res.status(400).send('Invalid redirect destination.');
+      } catch {
         return res.status(400).send('Invalid redirect URI structure.');
       }
     };

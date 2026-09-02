@@ -43,6 +43,59 @@
       --radius-md: 10px;
       --radius-lg: 14px;
       --radius-round: 999px;
+      --color-background-titlebar: #181818c7;
+      --color-background-log: rgba(18, 18, 22, 0.6);
+      --color-background-code: #0d0d10;
+      --color-background-code-inner: #131317;
+    }
+
+    :root[data-theme="light"] {
+      color-scheme: light;
+      --color-background-surface: #f5f5f7;
+      --color-background-elevated: #ffffff;
+      --color-background-control: rgb(0 0 0 / 3%);
+      --color-background-control-hover: rgb(0 0 0 / 6%);
+      --color-background-control-active: rgb(0 0 0 / 9%);
+      --color-background-button-secondary: rgb(0 0 0 / 5%);
+      --color-background-button-secondary-hover: rgb(0 0 0 / 9%);
+      --color-text-primary: #1d1d1f;
+      --color-text-secondary: rgb(29 29 31 / 70%);
+      --color-text-tertiary: rgb(29 29 31 / 52%);
+      --color-text-disabled: rgb(29 29 31 / 32%);
+      --color-border: rgb(0 0 0 / 9%);
+      --color-border-heavy: rgb(0 0 0 / 16%);
+      --color-border-focus: rgb(0 113 227 / 65%);
+      --color-background-titlebar: rgb(248 248 250 / 92%);
+      --color-background-log: rgb(255 255 255 / 82%);
+      --color-background-code: #f0f0f2;
+      --color-background-code-inner: #f7f7f8;
+    }
+
+    :root[data-theme="light"] .titlebar-nav,
+    :root[data-theme="light"] .titlebar-tab-btn.is-active,
+    :root[data-theme="light"] .segmented-control,
+    :root[data-theme="light"] .duration-pill,
+    :root[data-theme="light"] .token-badge.is-duration,
+    :root[data-theme="light"] .detail-copy-btn,
+    :root[data-theme="light"] .copyable-badge {
+      background: rgb(0 0 0 / 4%);
+      border-color: var(--color-border);
+    }
+
+    :root[data-theme="light"] .activity-summary-card,
+    :root[data-theme="light"] .guide-box {
+      background: linear-gradient(180deg, rgb(255 255 255 / 90%) 0%, rgb(248 248 250 / 92%) 100%);
+      border-color: var(--color-border);
+      box-shadow: 0 4px 14px rgb(0 0 0 / 7%);
+    }
+
+    :root[data-theme="light"] .activity-item {
+      border-bottom-color: var(--color-border);
+    }
+
+    :root[data-theme="light"] .activity-item summary:hover,
+    :root[data-theme="light"] .detail-copy-btn:hover {
+      background: rgb(0 0 0 / 4%);
     }
 
     * { box-sizing: border-box; }
@@ -51,7 +104,7 @@
       height: 100%;
       margin: 0;
       padding: 0;
-      background: var(--gray-900);
+      background: var(--color-background-surface);
       
       color: var(--color-text-primary);
       font-family: var(--font-ui);
@@ -72,7 +125,7 @@
       align-items: center;
       justify-content: space-between;
       padding: 0 16px 0 80px; /* Space for macOS traffic lights */
-      background: #181818c7;
+      background: var(--color-background-titlebar);
       border-bottom: 1px solid var(--color-border);
       -webkit-app-region: drag;
     }
@@ -134,6 +187,7 @@
       width: min(640px, calc(100% - 48px));
       margin: 0 auto;
       padding: 26px 0 40px;
+      contain: layout style;
     }
 
     .logs-container {
@@ -322,6 +376,20 @@
       background: var(--color-background-control-active);
       box-shadow: 0 0 0 3px rgb(51 156 255 / 10%);
     }
+    .mcp-instructions-heading {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      width: 100%;
+    }
+    .mcp-instructions-heading .btn,
+    .pi-tools-toolbar .btn {
+      min-height: 24px;
+      height: 24px;
+      padding: 0 8px;
+      font-size: 10px;
+    }
 
     .pi-capabilities-header {
       display: flex;
@@ -332,7 +400,7 @@
     }
     .pi-capabilities-copy { min-width: 0; }
     .pi-capabilities-copy .field-hint { margin-top: 4px; }
-    .pi-enabled-toggle, .pi-tool-checkbox {
+    .pi-enabled-toggle, .pi-tool-checkbox, .default-tool-checkbox {
       width: 16px;
       height: 16px;
       flex: 0 0 auto;
@@ -345,7 +413,7 @@
       border: 1px solid var(--color-border);
       border-radius: var(--radius-md);
       background: rgba(0, 0, 0, 0.08);
-      overflow: hidden;
+      overflow: visible;
     }
     .pi-tools-toolbar {
       display: flex;
@@ -358,7 +426,58 @@
       color: var(--color-text-tertiary);
       font-size: 10px;
     }
-    .pi-tool-list { max-height: 360px; overflow-y: auto; }
+    .pi-tools-toolbar-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex: 0 0 auto;
+    }
+    .pi-tools-search-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 190px;
+      gap: 7px;
+      padding: 7px 10px;
+      border-bottom: 1px solid var(--color-border);
+    }
+    .pi-tools-search {
+      width: 100%;
+      height: 28px;
+      padding: 0 9px;
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-sm);
+      background: var(--color-background-control);
+      color: var(--color-text-primary);
+      font-family: var(--font-mono);
+      font-size: 10px;
+      outline: none;
+      box-sizing: border-box;
+      -webkit-app-region: no-drag;
+    }
+    .pi-tools-search:focus {
+      border-color: var(--color-border-focus);
+      background: var(--color-background-control-active);
+      box-shadow: 0 0 0 3px rgb(51 156 255 / 10%);
+    }
+    .pi-tools-search::placeholder { color: var(--color-text-disabled); }
+    .pi-tools-plugin-combobox input {
+      height: 28px;
+      padding-left: 8px;
+      font-family: var(--font-ui);
+      font-size: 10px;
+      background: var(--color-background-control);
+      color: var(--color-text-primary);
+    }
+    .pi-tools-plugin-combobox .combobox-arrow-btn {
+      right: 3px;
+      width: 22px;
+      height: 22px;
+    }
+    .pi-tool-list {
+      max-height: 360px;
+      overflow-y: auto;
+      contain: content;
+      will-change: scroll-position;
+    }
     .pi-tool-item {
       display: grid;
       grid-template-columns: 18px minmax(0, 1fr);
@@ -373,6 +492,7 @@
     .pi-tool-name-row {
       display: flex;
       align-items: center;
+      flex-wrap: wrap;
       gap: 8px;
       min-width: 0;
     }
@@ -390,15 +510,17 @@
       line-height: 1.45;
       overflow-wrap: anywhere;
     }
+    .pi-tool-plugin-badge,
     .pi-tool-token-warning {
       flex: 0 0 auto;
       padding: 2px 5px;
       border: 1px solid var(--color-border-heavy);
       border-radius: 999px;
-      color: var(--orange-300);
       font-size: 9px;
       font-weight: 600;
     }
+    .pi-tool-plugin-badge { color: var(--color-text-tertiary); }
+    .pi-tool-token-warning { color: var(--orange-300); }
     .pi-tools-empty {
       padding: 16px 10px;
       color: var(--color-text-tertiary);
@@ -679,7 +801,7 @@
       width: 100%;
       height: 110px;
       padding: 8px 10px;
-      background: var(--gray-1000);
+      background: var(--color-background-code);
       border: 1px solid var(--color-border);
       border-radius: var(--radius-sm);
       color: var(--color-text-secondary);
@@ -824,7 +946,7 @@
       overflow: hidden;
     }
 
-    #runtime-log-view {
+    .log-subtab-view {
       width: 100%;
       flex: 1 1 auto;
       min-height: 0;
@@ -838,103 +960,106 @@
     }
 
     /* Activity & Log Styles */
-    #all-log-view, #http-log-view, #tunnel-log-view, #runtime-log-view {
-      min-height: 0;
-      border: 1px solid var(--color-border);
-      border-radius: var(--radius-md);
-      background: var(--color-background-control);
-      overflow-x: hidden;
-      overflow-y: auto;
-      overscroll-behavior: contain;
+    .activity-summary-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+      margin-bottom: 14px;
     }
+    .activity-summary-card {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      padding: 12px 16px;
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.04) 0%, rgba(255, 255, 255, 0.015) 100%);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: var(--radius-md);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .activity-summary-card:hover {
+      border-color: rgba(255, 255, 255, 0.15);
+      transform: translateY(-1px);
+    }
+    .activity-summary-card.is-warning {
+      border-color: rgba(251, 191, 36, 0.25);
+      background: linear-gradient(180deg, rgba(251, 191, 36, 0.08) 0%, rgba(251, 191, 36, 0.02) 100%);
+    }
+    .activity-summary-card.is-error {
+      border-color: rgba(248, 113, 113, 0.28);
+      background: linear-gradient(180deg, rgba(248, 113, 113, 0.08) 0%, rgba(248, 113, 113, 0.02) 100%);
+    }
+    .activity-summary-card strong {
+      font-size: 22px;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: -0.02em;
+    }
+    .activity-summary-card small {
+      color: var(--color-text-tertiary);
+      font-size: 10.5px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
     .tunnel-level-badge {
       font-family: var(--font-mono);
       font-size: 10px;
       font-weight: 700;
-      padding: 1px 5px;
+      padding: 2px 6px;
       border-radius: 4px;
       text-transform: uppercase;
+      letter-spacing: 0.02em;
     }
-    .tunnel-level-info { background: rgba(51, 156, 255, 0.15); color: var(--blue-300); }
-    .tunnel-level-warn { background: rgba(245, 158, 11, 0.18); color: #fbbf24; }
-    .tunnel-level-error { background: rgba(239, 68, 68, 0.2); color: var(--red-300); }
-    .tunnel-level-debug { background: rgba(255, 255, 255, 0.08); color: var(--color-text-tertiary); }
+    .tunnel-level-info { background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.25); }
+    .tunnel-level-warn { background: rgba(251, 191, 36, 0.16); color: #fbbf24; border: 1px solid rgba(251, 191, 36, 0.25); }
+    .tunnel-level-error { background: rgba(248, 113, 113, 0.2); color: #f87171; border: 1px solid rgba(248, 113, 113, 0.3); }
+    .tunnel-level-debug { background: rgba(255, 255, 255, 0.06); color: var(--color-text-tertiary); border: 1px solid rgba(255, 255, 255, 0.1); }
+
     .http-method-badge {
       font-family: var(--font-mono);
       font-size: 10px;
       font-weight: 700;
-      padding: 1px 5px;
+      padding: 2px 6px;
       border-radius: 4px;
       text-transform: uppercase;
+      letter-spacing: 0.03em;
     }
-    .http-method-GET { background: rgba(51, 156, 255, 0.15); color: var(--blue-300); }
-    .http-method-POST { background: rgba(64, 201, 119, 0.15); color: var(--green-300); }
-    .http-method-OPTIONS { background: rgba(168, 85, 247, 0.15); color: #c084fc; }
-    .http-method-DELETE { background: rgba(239, 68, 68, 0.15); color: var(--red-300); }
-    .http-method-PUT { background: rgba(245, 158, 11, 0.15); color: #fbbf24; }
+    .http-method-GET { background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.25); }
+    .http-method-POST { background: rgba(52, 211, 153, 0.15); color: #34d399; border: 1px solid rgba(52, 211, 153, 0.25); }
+    .http-method-OPTIONS { background: rgba(192, 132, 252, 0.15); color: #c084fc; border: 1px solid rgba(192, 132, 252, 0.25); }
+    .http-method-DELETE { background: rgba(248, 113, 113, 0.18); color: #f87171; border: 1px solid rgba(248, 113, 113, 0.3); }
+    .http-method-PUT { background: rgba(251, 191, 36, 0.16); color: #fbbf24; border: 1px solid rgba(251, 191, 36, 0.25); }
 
     .http-status-badge {
       font-family: var(--font-mono);
       font-size: 10px;
       font-weight: 600;
-      padding: 1px 5px;
+      padding: 2px 6px;
       border-radius: 4px;
     }
-    .http-status-2xx { background: rgba(64, 201, 119, 0.15); color: var(--green-300); }
-    .http-status-3xx { background: rgba(51, 156, 255, 0.15); color: var(--blue-300); }
-    .http-status-4xx { background: rgba(245, 158, 11, 0.18); color: #fbbf24; }
-    .http-status-5xx { background: rgba(239, 68, 68, 0.2); color: var(--red-300); }
-
-    .activity-summary-grid {
-      display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 10px;
-      margin-bottom: 18px;
-    }
-    .activity-summary-card {
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-      padding: 12px 14px;
-      background: var(--color-background-control);
-      border: 1px solid var(--color-border);
-      border-radius: var(--radius-md);
-      transition: border-color 0.15s ease;
-    }
-    .activity-summary-card.is-warning {
-      border-color: rgba(255, 133, 73, 0.3);
-      background: rgba(255, 133, 73, 0.05);
-    }
-    .activity-summary-card.is-error {
-      border-color: rgba(255, 103, 100, 0.3);
-      background: rgba(255, 103, 100, 0.05);
-    }
-    .activity-summary-card strong {
-      font-size: 20px;
-      font-weight: 600;
-      letter-spacing: -0.02em;
-    }
-    .activity-summary-card small {
-      color: var(--color-text-tertiary);
-      font-size: 11px;
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
-    }
+    .http-status-2xx { background: rgba(52, 211, 153, 0.15); color: #34d399; }
+    .http-status-3xx { background: rgba(56, 189, 248, 0.15); color: #38bdf8; }
+    .http-status-4xx { background: rgba(251, 191, 36, 0.18); color: #fbbf24; }
+    .http-status-5xx { background: rgba(248, 113, 113, 0.2); color: #f87171; }
 
     .log-search {
       flex: 1;
       min-width: 180px;
-      height: 26px;
-      padding: 0 10px;
+      height: 28px;
+      padding: 0 11px;
       border: 1px solid var(--color-border);
       border-radius: var(--radius-sm);
       background: var(--color-background-control);
       color: var(--color-text-primary);
       font-size: 11px;
       outline: none;
+      transition: border-color 0.15s ease, box-shadow 0.15s ease;
     }
     .log-search:focus {
       border-color: var(--color-border-focus);
+      box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.15);
     }
 
     .log-toolbar {
@@ -942,8 +1067,8 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 8px;
-      margin-bottom: 8px;
+      gap: 10px;
+      margin-bottom: 10px;
       flex-wrap: wrap;
     }
     .segmented-control {
@@ -951,11 +1076,11 @@
       padding: 2px;
       border: 1px solid var(--color-border);
       border-radius: var(--radius-sm);
-      background: var(--color-background-control);
+      background: rgba(255, 255, 255, 0.03);
     }
     .segmented-btn {
-      height: 24px;
-      padding: 0 10px;
+      height: 26px;
+      padding: 0 12px;
       border: 0;
       border-radius: calc(var(--radius-sm) - 2px);
       background: transparent;
@@ -973,144 +1098,198 @@
       background: var(--color-background-control-active);
       color: var(--color-text-primary);
       font-weight: 600;
-    }
-
-    #mcp-log-view {
-      height: auto;
-      min-height: 220px;
-      display: grid;
-      grid-template-rows: auto auto minmax(0, 1fr);
-      overflow: hidden;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
     }
 
     .activity-table {
+      flex: 1 1 auto;
       min-height: 0;
       border: 1px solid var(--color-border);
       border-radius: var(--radius-md);
-      background: var(--color-background-control);
+      background: var(--color-background-log);
+      backdrop-filter: blur(12px);
       overflow-x: hidden;
       overflow-y: auto;
       overscroll-behavior: contain;
+      contain: content;
+      will-change: scroll-position;
     }
     .activity-item {
-      border-bottom: 1px solid var(--color-border);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
       transition: background 0.15s ease;
     }
     .activity-item:last-child {
       border-bottom: none;
     }
     .activity-item summary {
-      display: grid;
-      grid-template-columns: 8px minmax(0, 1fr) auto 16px;
+      display: flex;
       align-items: center;
       gap: 12px;
-      padding: 10px 14px;
+      padding: 10px 16px;
       cursor: pointer;
       list-style: none;
+      transition: background 0.15s ease;
     }
     .activity-item summary::-webkit-details-marker {
       display: none;
     }
     .activity-item summary:hover {
-      background: var(--color-background-control-hover);
+      background: rgba(255, 255, 255, 0.03);
     }
     .activity-dot {
       width: 7px;
       height: 7px;
       border-radius: 50%;
+      flex-shrink: 0;
     }
-    .activity-dot.is-success { background: var(--green-300); box-shadow: 0 0 6px rgba(64, 201, 119, 0.4); }
-    .activity-dot.is-error { background: var(--red-300); box-shadow: 0 0 6px rgba(255, 103, 100, 0.4); }
-    .activity-dot.is-info { background: var(--blue-300); }
-    .activity-dot.is-warn { background: var(--orange-300); }
+    .activity-dot.is-success { background: #34d399; box-shadow: 0 0 8px rgba(52, 211, 153, 0.45); }
+    .activity-dot.is-error { background: #f87171; box-shadow: 0 0 8px rgba(248, 113, 113, 0.45); }
+    .activity-dot.is-info { background: #38bdf8; }
+    .activity-dot.is-warn { background: #fbbf24; }
 
-    .activity-meta {
-      min-width: 0;
-      display: flex;
-      flex-direction: column;
-      gap: 2px;
-    }
-    .activity-header-line {
+    .activity-lead {
+      flex: 0 0 auto;
       display: flex;
       align-items: center;
       gap: 8px;
     }
+    .activity-body {
+      flex: 1 1 auto;
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      overflow: hidden;
+    }
+    .activity-trail {
+      flex: 0 0 auto;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-left: auto;
+    }
+
     .tool-badge {
       font-family: var(--font-mono);
       font-size: 11px;
       font-weight: 600;
-      color: var(--blue-300);
-      background: rgba(51, 156, 255, 0.12);
-      padding: 1px 6px;
+      color: #38bdf8;
+      background: rgba(56, 189, 248, 0.12);
+      border: 1px solid rgba(56, 189, 248, 0.24);
+      padding: 1px 7px;
       border-radius: 4px;
+      letter-spacing: -0.01em;
+      white-space: nowrap;
     }
-    .flow-badge {
+    .tool-badge.tool-read { color: #38bdf8; background: rgba(56, 189, 248, 0.12); border-color: rgba(56, 189, 248, 0.24); }
+    .tool-badge.tool-write { color: #fbbf24; background: rgba(251, 191, 36, 0.12); border-color: rgba(251, 191, 36, 0.24); }
+    .tool-badge.tool-shell { color: #c084fc; background: rgba(192, 132, 252, 0.14); border-color: rgba(192, 132, 252, 0.26); }
+    .tool-badge.tool-skill { color: #34d399; background: rgba(52, 211, 153, 0.12); border-color: rgba(52, 211, 153, 0.24); }
+
+    .duration-pill {
       font-family: var(--font-mono);
       font-size: 10px;
-      font-weight: 700;
-      padding: 1px 5px;
-      border-radius: 3px;
-      letter-spacing: 0.02em;
+      color: var(--color-text-tertiary);
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      padding: 1px 6px;
+      border-radius: 10px;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
     }
-    .flow-badge.badge-mcp {
-      color: #c084fc;
-      background: rgba(168, 85, 247, 0.16);
-      border: 1px solid rgba(168, 85, 247, 0.3);
-    }
-    .flow-badge.badge-http {
-      color: #38bdf8;
-      background: rgba(56, 189, 248, 0.14);
-      border: 1px solid rgba(56, 189, 248, 0.3);
-    }
+
     .activity-summary-text {
       color: var(--color-text-secondary);
       font-size: 12px;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
+      width: 100%;
     }
     .activity-time {
       color: var(--color-text-tertiary);
       font-size: 11px;
       font-variant-numeric: tabular-nums;
+      white-space: nowrap;
     }
     .activity-chevron {
       color: var(--color-text-tertiary);
-      font-size: 10px;
-      transition: transform 0.15s ease;
+      font-size: 11px;
+      transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
       display: flex;
       justify-content: center;
+      width: 12px;
     }
     .activity-item[open] .activity-chevron {
       transform: rotate(90deg);
+      color: var(--color-text-primary);
     }
     .activity-details-panel {
-      padding: 12px 14px;
-      background: #0d0d0f;
+      padding: 14px 18px;
+      background: var(--color-background-code);
       border-top: 1px solid var(--color-border);
       display: flex;
       flex-direction: column;
-      gap: 10px;
+      gap: 12px;
     }
+
+    .detail-section-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 6px;
+    }
+    .detail-section-title {
+      font-size: 10.5px;
+      font-weight: 700;
+      color: var(--color-text-tertiary);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .detail-copy-btn {
+      height: 20px;
+      padding: 0 7px;
+      font-size: 10px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 4px;
+      background: rgba(255, 255, 255, 0.04);
+      color: var(--color-text-secondary);
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .detail-copy-btn:hover {
+      background: rgba(255, 255, 255, 0.08);
+      color: var(--color-text-primary);
+    }
+    .detail-copy-btn.is-copied {
+      background: rgba(52, 211, 153, 0.18);
+      color: #34d399;
+      border-color: rgba(52, 211, 153, 0.35);
+    }
+
     .activity-code-block {
-      background: #141416;
+      background: var(--color-background-code-inner);
       border: 1px solid var(--color-border);
-      border-radius: var(--radius-sm);
-      padding: 8px 10px;
+      border-radius: 6px;
+      padding: 10px 12px;
       font-family: var(--font-mono);
       font-size: 11px;
-      line-height: 1.45;
-      color: var(--gray-100);
+      line-height: 1.5;
+      color: var(--color-text-secondary);
       white-space: pre-wrap;
       word-break: break-all;
-      max-height: 240px;
+      max-height: 260px;
       overflow-y: auto;
       user-select: text !important;
       -webkit-user-select: text !important;
       cursor: text;
     }
+    .activity-code-block.is-error {
+      background: rgba(248, 113, 113, 0.06);
+      border-color: rgba(248, 113, 113, 0.28);
+      color: #fca5a5;
+    }
     .activity-empty {
-      padding: 32px 16px;
+      padding: 36px 16px;
       text-align: center;
       color: var(--color-text-tertiary);
       font-size: 12px;
@@ -1128,7 +1307,7 @@
       min-height: 0;
       max-height: none;
       padding: 10px 12px;
-      background: var(--gray-1000);
+      background: var(--color-background-code);
       border: 1px solid var(--color-border);
       border-radius: var(--radius-md);
       color: var(--color-text-secondary);
@@ -1172,7 +1351,7 @@
       overflow: auto;
       border: 1px solid var(--color-border);
       border-radius: 6px;
-      background: #0b0b0c;
+      background: var(--color-background-code-inner);
       color: var(--color-text-tertiary);
       font-size: 10px;
       white-space: pre-wrap;
@@ -1189,7 +1368,7 @@
       margin-right: 6px;
       font-weight: 600;
     }
-    .log-tag.tag-system { background: rgba(255, 255, 255, 0.1); color: var(--gray-100); }
+    .log-tag.tag-system { background: var(--color-background-control-active); color: var(--color-text-secondary); }
     .log-tag.tag-tunnel { background: rgba(51, 156, 255, 0.18); color: var(--blue-300); }
     .log-tag.tag-auth { background: rgba(64, 201, 119, 0.18); color: var(--green-300); }
     .log-tag.tag-mcp { background: rgba(168, 85, 247, 0.18); color: #c084fc; }
@@ -1264,8 +1443,8 @@
         <p>Configure local tools, network tunnels, and authorization credentials for AI assistants.</p>
       </div>
 
-      <!-- Section 1: Ingress & Network -->
-      <div class="section-heading">Network & Tunnel</div>
+      <!-- Section 1: General -->
+      <div class="section-heading">General</div>
       <div class="settings-card">
         <div class="setting-row">
           <div class="setting-label">Auto Connect</div>
@@ -1284,8 +1463,40 @@
         </div>
 
         <div class="setting-row">
+          <div class="setting-label">Language</div>
+          <div class="input-combobox compact-combobox" id="language-combobox-wrapper">
+            <input type="text" id="language-display" value="English" readonly spellcheck="false" style="cursor: pointer;" role="combobox" aria-haspopup="listbox" aria-controls="language-dropdown-menu" aria-expanded="false" aria-label="Language">
+            <button type="button" class="combobox-arrow-btn" id="language-arrow" title="Select Language" aria-label="Select language" aria-controls="language-dropdown-menu" aria-expanded="false">
+              <svg viewBox="0 0 24 24"><path d="M7 10l5 5 5-5z"/></svg>
+            </button>
+            <div class="combobox-dropdown" id="language-dropdown-menu" role="listbox" aria-label="Languages">
+              <div class="combobox-option" role="option" tabindex="-1" data-value="en"><span>English</span></div>
+              <div class="combobox-option" role="option" tabindex="-1" data-value="zh-CN"><span>中文</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="setting-row">
+          <div class="setting-label">Appearance</div>
+          <div class="input-combobox compact-combobox" id="appearance-combobox-wrapper">
+            <input type="text" id="appearance-display" value="Dark" readonly spellcheck="false" style="cursor: pointer;" role="combobox" aria-haspopup="listbox" aria-controls="appearance-dropdown-menu" aria-expanded="false" aria-label="Appearance">
+            <button type="button" class="combobox-arrow-btn" id="appearance-arrow" title="Select Appearance" aria-label="Select appearance" aria-controls="appearance-dropdown-menu" aria-expanded="false">
+              <svg viewBox="0 0 24 24"><path d="M7 10l5 5 5-5z"/></svg>
+            </button>
+            <div class="combobox-dropdown" id="appearance-dropdown-menu" role="listbox" aria-label="Appearance modes">
+              <div class="combobox-option" role="option" tabindex="-1" data-value="dark"><span>Dark</span></div>
+              <div class="combobox-option" role="option" tabindex="-1" data-value="light"><span>Light</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 2: Ingress & Network -->
+      <div class="section-heading">Network & Tunnel</div>
+      <div class="settings-card">
+        <div class="setting-row">
           <div class="setting-label">Tunnel Mode</div>
-          <div class="input-combobox compact-combobox" id="tunnel-mode-combobox-wrapper">
+          <div class="input-combobox" id="tunnel-mode-combobox-wrapper">
             <input type="text" id="tunnel-mode-display" value="Cloudflare Named Tunnel" readonly spellcheck="false" style="cursor: pointer;" role="combobox" aria-haspopup="listbox" aria-controls="tunnel-mode-dropdown-menu" aria-expanded="false" aria-label="Tunnel mode">
             <button type="button" class="combobox-arrow-btn" id="tunnel-mode-arrow" title="Select Tunnel Mode" aria-label="Select tunnel mode" aria-controls="tunnel-mode-dropdown-menu" aria-expanded="false">
               <svg viewBox="0 0 24 24"><path d="M7 10l5 5 5-5z"/></svg>
@@ -1301,7 +1512,7 @@
 
         <div class="setting-row">
           <div class="setting-label">MCP Listen Address</div>
-          <div class="input-combobox compact-combobox" id="listen-address-combobox-wrapper">
+          <div class="input-combobox" id="listen-address-combobox-wrapper">
             <input type="text" id="listen-host" value="127.0.0.1 · Loopback only" readonly spellcheck="false" style="cursor: pointer;" role="combobox" aria-haspopup="listbox" aria-controls="listen-address-dropdown-menu" aria-expanded="false" aria-label="MCP listen address">
             <button type="button" class="combobox-arrow-btn" id="listen-address-arrow" title="Select MCP listen address" aria-label="Select MCP listen address" aria-controls="listen-address-dropdown-menu" aria-expanded="false">
               <svg viewBox="0 0 24 24"><path d="M7 10l5 5 5-5z"/></svg>
@@ -1445,20 +1656,43 @@
         </div>
       </div>
 
-      <!-- Section 5: MCP Instructions & Pi Capabilities -->
-      <div class="section-heading">MCP Instructions & Pi</div>
+      <!-- Section 5: MCP Instructions & Capabilities -->
+      <div class="section-heading">MCP Instructions & Capabilities</div>
       <div class="settings-card" id="mcp-capabilities-card">
         <div class="setting-row is-stacked">
-          <div class="setting-label">MCP Instructions</div>
+          <div class="mcp-instructions-heading">
+            <div class="setting-label">MCP Instructions</div>
+            <button type="button" class="btn btn-secondary" id="reset-mcp-instructions-btn">Reset</button>
+          </div>
           <textarea id="mcp-instructions" class="mcp-instructions-textarea" spellcheck="false" aria-label="MCP server instructions"></textarea>
-          <div class="field-hint">Automatically sent to the MCP client during session initialization. Edit this to control how assistants use Aura.</div>
+          <div class="field-hint">Automatically sent to the MCP client during session initialization. Reset uses the standard Aura prompt for the current Pi and language settings.</div>
+        </div>
+
+        <div class="setting-row is-stacked">
+          <div class="pi-capabilities-header">
+            <div class="pi-capabilities-copy">
+              <div class="setting-label">Use Aura Core Capabilities</div>
+              <div class="field-hint">Expose Aura's built-in MCP tools such as read_file, write_file, and execute_shell.</div>
+            </div>
+            <input type="checkbox" id="default-capabilities-toggle" class="pi-enabled-toggle" aria-label="Use default Aura capabilities">
+          </div>
+
+          <div class="pi-tools-panel" id="default-tools-panel">
+            <div class="pi-tools-toolbar">
+              <span id="default-tools-summary">Loading default tools...</span>
+              <span>Aura</span>
+            </div>
+            <div class="pi-tool-list" id="default-tools-list" style="max-height: 250px;">
+              <div class="pi-tools-empty">Loading default Aura capabilities...</div>
+            </div>
+          </div>
         </div>
 
         <div class="setting-row is-stacked">
           <div class="pi-capabilities-header">
             <div class="pi-capabilities-copy">
               <div class="setting-label">Use Pi Capabilities</div>
-              <div class="field-hint">Expose only the Pi tools you select below. Disabled by default.</div>
+              <div class="field-hint">Selected Pi tools are exposed and enabled immediately for each MCP connection. Disabled by default.</div>
             </div>
             <input type="checkbox" id="pi-enabled-toggle" class="pi-enabled-toggle" aria-label="Use Pi capabilities">
           </div>
@@ -1466,7 +1700,21 @@
           <div class="pi-tools-panel" id="pi-tools-panel" style="display: none;">
             <div class="pi-tools-toolbar">
               <span id="pi-tools-summary">Loading Pi tools...</span>
-              <span id="pi-version-label"></span>
+              <div class="pi-tools-toolbar-actions">
+                <span id="pi-version-label"></span>
+                <button type="button" class="btn btn-secondary" id="pi-tools-select-visible-btn">Select visible</button>
+                <button type="button" class="btn btn-secondary" id="pi-tools-clear-visible-btn">Clear visible</button>
+              </div>
+            </div>
+            <div class="pi-tools-search-row">
+              <input type="search" id="pi-tools-search" class="pi-tools-search" placeholder="Search tools..." autocomplete="off" spellcheck="false" aria-label="Search Pi tools">
+              <div class="input-combobox pi-tools-plugin-combobox" id="pi-tools-plugin-combobox-wrapper">
+                <input type="text" id="pi-tools-plugin-display" value="All plugins" readonly spellcheck="false" style="cursor: pointer;" role="combobox" aria-haspopup="listbox" aria-controls="pi-tools-plugin-dropdown-menu" aria-expanded="false" aria-label="Filter Pi tools by plugin">
+                <button type="button" class="combobox-arrow-btn" id="pi-tools-plugin-arrow" title="Filter Pi tools by plugin" aria-label="Filter Pi tools by plugin" aria-controls="pi-tools-plugin-dropdown-menu" aria-expanded="false">
+                  <svg viewBox="0 0 24 24"><path d="M7 10l5 5 5-5z"/></svg>
+                </button>
+                <div class="combobox-dropdown" id="pi-tools-plugin-dropdown-menu" role="listbox" aria-label="Pi tool plugins"></div>
+              </div>
             </div>
             <div class="pi-tool-list" id="pi-tools-list">
               <div class="pi-tools-empty">Enable Pi capabilities to load the available tool registry.</div>
@@ -1536,9 +1784,7 @@
       <!-- Log Type Switcher -->
       <div class="log-toolbar">
         <div class="segmented-control" role="tablist">
-          <button class="segmented-btn is-active" id="log-subtab-all" type="button" onclick="switchLogSubtab('all')">All (MCP + HTTP)</button>
-          <button class="segmented-btn" id="log-subtab-mcp" type="button" onclick="switchLogSubtab('mcp')">MCP Tools</button>
-          <button class="segmented-btn" id="log-subtab-http" type="button" onclick="switchLogSubtab('http')">HTTP Requests</button>
+          <button class="segmented-btn is-active" id="log-subtab-mcp" type="button" onclick="switchLogSubtab('mcp')">MCP Requests</button>
           <button class="segmented-btn" id="log-subtab-tunnel" type="button" onclick="switchLogSubtab('tunnel')">Tunnel</button>
           <button class="segmented-btn" id="log-subtab-runtime" type="button" onclick="switchLogSubtab('runtime')">App Runtime</button>
         </div>
@@ -1551,39 +1797,12 @@
         </div>
       </div>
 
-      <!-- View 0: Merged (MCP + HTTP) Timeline -->
-      <div id="all-log-view">
-        <div class="activity-summary-grid">
-          <div class="activity-summary-card">
-            <strong id="metric-all-total">0</strong>
-            <small>Total Activity</small>
-          </div>
-          <div class="activity-summary-card" style="border-color: rgba(168, 85, 247, 0.3); background: rgba(168, 85, 247, 0.05);">
-            <strong id="metric-all-mcp" style="color: #c084fc;">0</strong>
-            <small>MCP Calls</small>
-          </div>
-          <div class="activity-summary-card" style="border-color: rgba(56, 189, 248, 0.3); background: rgba(56, 189, 248, 0.05);">
-            <strong id="metric-all-http" style="color: #38bdf8;">0</strong>
-            <small>HTTP Requests</small>
-          </div>
-          <div class="activity-summary-card is-error">
-            <strong id="metric-all-errors" style="color: var(--red-300);">0</strong>
-            <small>Errors</small>
-          </div>
-        </div>
-
-        <div class="section-heading">Live MCP & HTTP Traffic</div>
-        <div class="activity-table" id="all-table-container">
-          <div class="activity-empty" id="all-empty-state">Waiting for MCP tool calls or HTTP requests...</div>
-        </div>
-      </div>
-
-      <!-- View A: MCP Invocations List -->
-      <div id="mcp-log-view" style="display: none;">
+      <!-- View 1: MCP Requests List (HTTP + Tool Call integrated) -->
+      <div id="mcp-log-view" class="log-subtab-view">
         <div class="activity-summary-grid">
           <div class="activity-summary-card">
             <strong id="metric-total-calls">0</strong>
-            <small>Total Tool Calls</small>
+            <small>Total Tool Requests</small>
           </div>
           <div class="activity-summary-card" style="border-color: rgba(64, 201, 119, 0.3); background: rgba(64, 201, 119, 0.05);">
             <strong id="metric-success-calls" style="color: var(--green-300);">0</strong>
@@ -1595,45 +1814,24 @@
           </div>
         </div>
 
-        <div class="section-heading">Recent Tool Invocations</div>
+        <div class="section-heading">Recent MCP Requests</div>
         <div class="activity-table" id="activity-table-container">
-          <div class="activity-empty" id="activity-empty-state">Waiting for AI assistant tool invocations...</div>
+          <div class="activity-empty" id="activity-empty-state">Waiting for AI assistant MCP requests...</div>
         </div>
       </div>
 
-      <!-- View B: HTTP Inbound Requests List -->
-      <div id="http-log-view" style="display: none;">
-        <div class="activity-summary-grid">
-          <div class="activity-summary-card">
-            <strong id="metric-http-total">0</strong>
-            <small>Total HTTP</small>
-          </div>
-          <div class="activity-summary-card" style="border-color: rgba(64, 201, 119, 0.3); background: rgba(64, 201, 119, 0.05);">
-            <strong id="metric-http-success" style="color: var(--green-300);">0</strong>
-            <small>2xx / 3xx Success</small>
-          </div>
-          <div class="activity-summary-card is-error">
-            <strong id="metric-http-errors" style="color: var(--red-300);">0</strong>
-            <small>4xx / 5xx Errors</small>
-          </div>
-        </div>
-
-        <div class="section-heading">Inbound HTTP Requests</div>
-        <div class="activity-table" id="http-table-container">
-          <div class="activity-empty" id="http-empty-state">Waiting for incoming HTTP requests...</div>
-        </div>
-      </div>
-
-      <!-- View C: Tunnel Structured List -->
-      <div id="tunnel-log-view" style="display: none;">
-        <div class="activity-table" id="tunnel-table-container" style="border: none; border-radius: 0;">
+      <!-- View 2: Tunnel Structured List -->
+      <div id="tunnel-log-view" class="log-subtab-view" style="display: none;">
+        <div class="section-heading">Tunnel Process & Diagnostics</div>
+        <div class="activity-table" id="tunnel-table-container">
           <div class="activity-empty" id="tunnel-empty-state">Waiting for tunnel events...</div>
         </div>
       </div>
 
-      <!-- View D: App Runtime Structured List -->
-      <div id="runtime-log-view" style="display: none;">
-        <div class="activity-table" id="runtime-table-container" style="border: none; border-radius: 0;">
+      <!-- View 3: App Runtime Structured List -->
+      <div id="runtime-log-view" class="log-subtab-view" style="display: none;">
+        <div class="section-heading">App Runtime & Lifecycle</div>
+        <div class="activity-table" id="runtime-table-container">
           <div class="activity-empty" id="runtime-empty-state">Waiting for app runtime events...</div>
         </div>
       </div>
