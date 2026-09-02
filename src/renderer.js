@@ -38,6 +38,11 @@ const ZH_TRANSLATIONS = {
   'MCP Listen Address': 'MCP 监听地址',
   'MCP Listen Port': 'MCP 监听端口',
   'Tunnel Binary': '隧道程序',
+  'Binary File Path': '二进制文件路径',
+  'Auto detect': '自动检测',
+  'Auto detect (recommended)': '自动检测（推荐）',
+  'Detected': '已检测',
+  'Common path': '常见路径',
   'Browse…': '浏览…',
   'Tunnel ID': '隧道 ID',
   'Tunnel API Key': '隧道 API Key',
@@ -66,6 +71,8 @@ const ZH_TRANSLATIONS = {
   'Access & Authorization': '访问与授权',
   'Admin Password': '管理员密码',
   'Set once, used for all OAuth approval screens.': '设置一次，用于所有 OAuth 授权页面。',
+  'Legacy Electron password must be reset': '旧版 Electron 管理密码需要重新设置',
+  'Reset required — enter a new password': '需要重置——请输入新的管理密码',
   'Active Connections': '活跃连接',
   'OpenAI Secure Ingress Managed': 'OpenAI 安全入口已托管',
   'No active connections.': '暂无活跃连接。',
@@ -845,8 +852,16 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (config.fsRoot) {
     document.getElementById('fs-root').value = config.fsRoot;
   }
-  if (config.adminSecret) {
-    document.getElementById('admin-pass').placeholder = '••••••••';
+  const adminPassInput = document.getElementById('admin-pass');
+  if (adminPassInput) {
+    if (config.adminSecretNeedsReset) {
+      adminPassInput.placeholder = t('Reset required — enter a new password');
+      adminPassInput.dataset.needsReset = 'true';
+      flashTransientHint(t('Legacy Electron password must be reset'), 'tunnel-install-hint');
+    } else if (config.adminSecretConfigured) {
+      adminPassInput.placeholder = '••••••••';
+      adminPassInput.dataset.needsReset = 'false';
+    }
   }
 
   const initialPolicy = config.shellPolicy || 'unrestricted';
@@ -907,17 +922,6 @@ document.addEventListener('DOMContentLoaded', async () => {
       const isPassword = openaiApiKeyInput.type === 'password';
       openaiApiKeyInput.type = isPassword ? 'text' : 'password';
       openaiApiKeyToggleBtn.textContent = t(isPassword ? 'Hide' : 'Show');
-    });
-  }
-
-  const openaiBrowseBtn = document.getElementById('openai-binary-browse-btn');
-  if (openaiBrowseBtn && openaiBinaryInput) {
-    openaiBrowseBtn.addEventListener('click', async () => {
-      const chosen = await window.api.pickBinaryFile();
-      if (chosen) {
-        openaiBinaryInput.value = chosen;
-        updateNetworkSaveState();
-      }
     });
   }
 
@@ -1022,7 +1026,13 @@ function updateNetworkSaveState() {
   ];
 
   if (currentMode === 'cloudflare-named') {
-    activeFields.push(document.getElementById('cf-config-path'), document.getElementById('mcp-url'));
+    activeFields.push(
+      document.getElementById('openai-binary-path'),
+      document.getElementById('cf-config-path'),
+      document.getElementById('mcp-url')
+    );
+  } else if (currentMode === 'cloudflare-quick') {
+    activeFields.push(document.getElementById('openai-binary-path'));
   } else if (currentMode === 'openai') {
     activeFields.push(
       document.getElementById('openai-binary-path'),
@@ -1164,9 +1174,26 @@ function updateServiceUI(isRunning) {
 }
 
 document.getElementById('power-btn').addEventListener('click', async () => {
-  const isCurrentlyRunning = await window.api.getServiceState();
-  const newState = await window.api.toggleServiceState(!isCurrentlyRunning);
-  updateServiceUI(newState);
+  const button = document.getElementById('power-btn');
+  if (button) button.disabled = true;
+  try {
+    const isCurrentlyRunning = await window.api.getServiceState();
+    const newState = await window.api.toggleServiceState(!isCurrentlyRunning);
+    updateServiceUI(newState);
+  } catch (err) {
+    const errMsg = err?.message || String(err);
+    console.error('Failed to change Aura service state:', err);
+    flashTransientHint(`${currentServiceRunning ? 'Disconnect' : 'Connect'} failed: ${errMsg}`, 'tunnel-install-hint');
+    window.alert(`${currentServiceRunning ? 'Disconnect' : 'Connect'} failed:\n${errMsg}`);
+    try {
+      const realState = await window.api.getServiceState();
+      updateServiceUI(realState);
+    } catch (_) {
+      updateServiceUI(false);
+    }
+  } finally {
+    if (button) button.disabled = false;
+  }
 });
 
 window.api.onServiceStateChanged((isRunning) => {
@@ -1545,6 +1572,10 @@ if (openaiBinaryArrowBtn && openaiBinaryInput && openaiBinaryMenu) {
     event.stopPropagation();
     toggleOpenaiBinaryMenu();
   });
+  openaiBinaryInput.addEventListener('click', event => {
+    event.stopPropagation();
+    if (openaiBinaryMenu.style.display !== 'block') toggleOpenaiBinaryMenu();
+  });
   openaiBinaryInput.addEventListener('keydown', event => handleComboboxKeydown(event, openaiBinaryMenu, openaiBinaryInput, openaiBinaryArrowBtn));
   openaiBinaryArrowBtn.addEventListener('keydown', event => handleComboboxKeydown(event, openaiBinaryMenu, openaiBinaryInput, openaiBinaryArrowBtn));
 }
@@ -1728,6 +1759,7 @@ async function saveAccessSettings() {
     if (await window.api.saveSecret(input.value)) {
       input.value = '';
       input.placeholder = '••••••••';
+      input.dataset.needsReset = 'false';
       if (accessSaveBtn) {
         accessSaveBtn.classList.remove('btn-primary');
         flashSaveFeedback(accessSaveBtn);
@@ -2110,55 +2142,79 @@ async function reloadCfConfigFiles() {
   }
 }
 
-async function reloadTunnelBinaries() {
+async function reloadTunnelBinaries(mode = getCurrentMode()) {
   const binaryInput = document.getElementById('openai-binary-path');
   const binaryArrow = document.getElementById('openai-binary-arrow');
   const binaryMenu = document.getElementById('openai-binary-dropdown-menu');
   if (!binaryInput || !binaryArrow || !binaryMenu) return;
 
-  const binaries = await window.api.discoverTunnelBinaries();
-  if (binaries && binaries.length > 0) {
-    binaryMenu.replaceChildren();
-    const fragment = document.createDocumentFragment();
-    binaries.forEach(p => {
-      const item = document.createElement('div');
-      item.className = 'combobox-option';
-      item.setAttribute('role', 'option');
-      item.setAttribute('tabindex', '-1');
-      item.setAttribute('aria-selected', 'false');
+  const options = await window.api.discoverTunnelBinaries(mode);
+  const entries = Array.isArray(options) ? options : [];
+  const detected = entries.find(entry => entry?.detected === true);
+  binaryMenu.replaceChildren();
+  const fragment = document.createDocumentFragment();
 
-      const pathSpan = document.createElement('span');
-      pathSpan.style.overflow = 'hidden';
-      pathSpan.style.textOverflow = 'ellipsis';
-      pathSpan.textContent = p;
+  const autoOption = document.createElement('div');
+  autoOption.className = 'combobox-option';
+  autoOption.setAttribute('role', 'option');
+  autoOption.setAttribute('tabindex', '-1');
+  autoOption.setAttribute('aria-selected', 'false');
+  autoOption.dataset.value = '';
 
-      const tagSpan = document.createElement('span');
-      tagSpan.style.color = 'var(--color-text-tertiary)';
-      tagSpan.style.fontSize = '10px';
-      tagSpan.style.flex = 'none';
-      tagSpan.textContent = 'detected';
+  const autoText = document.createElement('span');
+  autoText.textContent = t('Auto detect (recommended)');
+  const autoHint = document.createElement('span');
+  autoHint.style.color = 'var(--color-text-tertiary)';
+  autoHint.style.fontSize = '10px';
+  autoHint.textContent = detected?.path || (mode === 'openai' ? 'tunnel-client' : 'cloudflared');
+  autoOption.appendChild(autoText);
+  autoOption.appendChild(autoHint);
+  autoOption.addEventListener('click', event => {
+    event.stopPropagation();
+    binaryInput.value = '';
+    setMenuVisibility(binaryMenu, binaryInput, binaryArrow, false);
+    scheduleUpdateNetworkSaveState();
+  });
+  fragment.appendChild(autoOption);
 
-      item.appendChild(pathSpan);
-      item.appendChild(tagSpan);
+  for (const entry of entries) {
+    if (!entry?.path) continue;
+    const item = document.createElement('div');
+    item.className = 'combobox-option';
+    item.setAttribute('role', 'option');
+    item.setAttribute('tabindex', '-1');
+    item.setAttribute('aria-selected', 'false');
+    item.dataset.value = entry.path;
 
-      item.addEventListener('click', (e) => {
-        e.stopPropagation();
-        binaryInput.value = p;
-        setMenuVisibility(binaryMenu, binaryInput, binaryArrow, false);
-        scheduleUpdateNetworkSaveState();
-      });
-      fragment.appendChild(item);
+    const pathSpan = document.createElement('span');
+    pathSpan.style.overflow = 'hidden';
+    pathSpan.style.textOverflow = 'ellipsis';
+    pathSpan.textContent = entry.path;
+
+    const tagSpan = document.createElement('span');
+    tagSpan.style.color = entry.detected ? 'var(--green-300)' : 'var(--color-text-tertiary)';
+    tagSpan.style.fontSize = '10px';
+    tagSpan.style.flex = 'none';
+    tagSpan.textContent = t(entry.detected ? 'Detected' : 'Common path');
+
+    item.appendChild(pathSpan);
+    item.appendChild(tagSpan);
+    item.addEventListener('click', event => {
+      event.stopPropagation();
+      binaryInput.value = entry.path;
+      setMenuVisibility(binaryMenu, binaryInput, binaryArrow, false);
+      scheduleUpdateNetworkSaveState();
     });
-    binaryMenu.appendChild(fragment);
-    binaryArrow.style.display = 'flex';
-    if (!binaryInput.value) {
-      binaryInput.placeholder = `Auto-detected: ${binaries[0]}`;
-    }
-  } else {
-    binaryArrow.style.display = 'none';
-    if (!binaryInput.value) {
-      binaryInput.placeholder = 'e.g. /usr/local/bin/tunnel-client';
-    }
+    fragment.appendChild(item);
+  }
+
+  binaryMenu.appendChild(fragment);
+  binaryArrow.style.display = 'flex';
+  binaryArrow.disabled = false;
+  if (!binaryInput.value) {
+    binaryInput.placeholder = detected?.path
+      ? `${t('Auto detect')}: ${detected.path}`
+      : `${t('Auto detect')}: ${mode === 'openai' ? 'tunnel-client' : 'cloudflared'}`;
   }
 }
 
@@ -2258,11 +2314,11 @@ async function updateTunnelModeFields(mode) {
     cfArrow.style.display = 'none';
     hintEl.style.display = 'block';
     linkEl.textContent = 'openai/tunnel-client';
-    await reloadTunnelBinaries();
+    await reloadTunnelBinaries(mode);
   } else if (mode === 'cloudflare-quick') {
     if (cfConfigRow) cfConfigRow.style.display = 'none';
     if (mcpUrlRow) mcpUrlRow.style.display = 'grid';
-    if (openaiBinaryRow) openaiBinaryRow.style.display = 'none';
+    if (openaiBinaryRow) openaiBinaryRow.style.display = 'grid';
     if (openaiTunnelIdRow) openaiTunnelIdRow.style.display = 'none';
     if (openaiApiKeyRow) openaiApiKeyRow.style.display = 'none';
     if (customSslCertRow) customSslCertRow.style.display = 'none';
@@ -2275,10 +2331,11 @@ async function updateTunnelModeFields(mode) {
     cfArrow.style.display = 'none';
     hintEl.style.display = 'block';
     linkEl.textContent = 'cloudflared';
+    await reloadTunnelBinaries(mode);
   } else if (mode === 'cloudflare-named') {
     if (cfConfigRow) cfConfigRow.style.display = 'grid';
     if (mcpUrlRow) mcpUrlRow.style.display = 'grid';
-    if (openaiBinaryRow) openaiBinaryRow.style.display = 'none';
+    if (openaiBinaryRow) openaiBinaryRow.style.display = 'grid';
     if (openaiTunnelIdRow) openaiTunnelIdRow.style.display = 'none';
     if (openaiApiKeyRow) openaiApiKeyRow.style.display = 'none';
     if (customSslCertRow) customSslCertRow.style.display = 'none';
@@ -2290,7 +2347,7 @@ async function updateTunnelModeFields(mode) {
     urlInput.style.backgroundColor = 'var(--color-background-control)';
     hintEl.style.display = 'block';
     linkEl.textContent = 'cloudflared';
-    await Promise.all([reloadCfConfigFiles(), reloadCfHostnames()]);
+    await Promise.all([reloadCfConfigFiles(), reloadCfHostnames(), reloadTunnelBinaries(mode)]);
   } else {
     if (cfConfigRow) cfConfigRow.style.display = 'none';
     if (mcpUrlRow) mcpUrlRow.style.display = 'grid';

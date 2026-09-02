@@ -3,7 +3,8 @@ node_modules/
 
 # Production build outputs
 dist/
-build/icon.iconset/
+src-tauri/target/
+src-tauri/gen/
 
 # OS metadata
 .DS_Store

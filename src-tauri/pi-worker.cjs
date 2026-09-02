@@ -1,5 +1,6 @@
 const { pathToFileURL } = require('url');
 const { randomUUID } = require('crypto');
+const readline = require('readline');
 
 let session = null;
 const inFlight = new Map();
@@ -21,9 +22,16 @@ function toolResultText(result) {
     .trim();
 }
 
+function sendMessage(message) {
+  if (process.send && process.connected) {
+    process.send(message);
+    return;
+  }
+  process.stdout.write(`AURA_IPC:${JSON.stringify(message)}\n`);
+}
+
 function sendResponse(id, ok, result, error) {
-  if (!process.connected) return;
-  process.send({ type: 'response', id, ok, result: clone(result), error });
+  sendMessage({ type: 'response', id, ok, result: clone(result), error });
 }
 
 async function initialize(params) {
@@ -39,7 +47,7 @@ async function initialize(params) {
     try {
       await session.extendResourcesFromExtensions('startup');
     } catch (error) {
-      process.send?.({ type: 'status', level: 'warn', message: 'Pi extension skill discovery was partial.', detail: { error: error.message } });
+      sendMessage({ type: 'status', level: 'warn', message: 'Pi extension skill discovery was partial.', detail: { error: error.message } });
     }
   }
 
@@ -93,7 +101,7 @@ async function handleRequest(message) {
           randomUUID(),
           params.args || {},
           controller.signal,
-          update => process.send?.({ type: 'update', id, update: clone(update) })
+          update => sendMessage({ type: 'update', id, update: clone(update) })
         );
         sendResponse(id, true, {
           content: Array.isArray(result?.content) ? clone(result.content) : [{ type: 'text', text: String(result ?? '') }],
@@ -121,7 +129,7 @@ async function handleRequest(message) {
   }
 }
 
-process.on('message', message => {
+function receiveMessage(message) {
   if (!message || typeof message !== 'object') return;
   if (message.type === 'cancel') {
     inFlight.get(message.id)?.abort();
@@ -130,9 +138,21 @@ process.on('message', message => {
   if (message.type === 'request') {
     handleRequest(message);
   }
-});
+}
 
-process.on('disconnect', () => {
-  try { session?.dispose(); } catch {}
-  process.exit(0);
-});
+if (process.send) {
+  process.on('message', receiveMessage);
+  process.on('disconnect', () => {
+    try { session?.dispose(); } catch {}
+    process.exit(0);
+  });
+} else {
+  const input = readline.createInterface({ input: process.stdin, crlfDelay: Infinity });
+  input.on('line', line => {
+    try { receiveMessage(JSON.parse(line)); } catch {}
+  });
+  input.on('close', () => {
+    try { session?.dispose(); } catch {}
+    process.exit(0);
+  });
+}

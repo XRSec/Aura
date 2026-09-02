@@ -40,7 +40,7 @@ jobs:
           node-version: 20
           cache: 'npm'
 
-      - name: Bump version
+      - name: Bump and synchronize version
         id: bump_step
         if: >-
           github.event_name == 'workflow_dispatch' &&
@@ -49,24 +49,70 @@ jobs:
           INPUT_BUMP: ${{ github.event.inputs.bump }}
         run: |
           git config user.name "github-actions[bot]"
-          git config user.email \
-            "github-actions[bot]@users.noreply.github.com"
-          NEW_VERSION=$(npm version "$INPUT_BUMP" \
-            -m "chore(release): %s [skip ci]")
-          git push origin HEAD --follow-tags
-          echo "NEW_TAG=$NEW_VERSION" >> "$GITHUB_ENV"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          NEW_TAG=$(npm version "$INPUT_BUMP" --no-git-tag-version)
+          VERSION=${NEW_TAG#v}
+          export VERSION
+
+          python3 - <<'PY'
+          import json
+          import os
+          import re
+          from pathlib import Path
+
+          version = os.environ["VERSION"]
+
+          cargo_toml = Path("src-tauri/Cargo.toml")
+          text = cargo_toml.read_text()
+          text, count = re.subn(
+              r'(?m)^(\[package\]\n(?:.*\n)*?version = ")[^"]+("$)',
+              rf'\g<1>{version}\2',
+              text,
+              count=1,
+          )
+          if count != 1:
+              raise SystemExit("Failed to synchronize src-tauri/Cargo.toml version")
+          cargo_toml.write_text(text)
+
+          tauri_conf = Path("src-tauri/tauri.conf.json")
+          data = json.loads(tauri_conf.read_text())
+          data["version"] = version
+          tauri_conf.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n")
+
+          cargo_lock = Path("src-tauri/Cargo.lock")
+          lock = cargo_lock.read_text()
+          lock, count = re.subn(
+              r'(\[\[package\]\]\nname = "aura"\nversion = ")[^"]+("\n)',
+              rf'\g<1>{version}\2',
+              lock,
+              count=1,
+          )
+          if count != 1:
+              raise SystemExit("Failed to synchronize src-tauri/Cargo.lock version")
+          cargo_lock.write_text(lock)
+          PY
+
+          git add package.json package-lock.json src-tauri/Cargo.toml src-tauri/Cargo.lock src-tauri/tauri.conf.json
+          git commit -m "chore(release): v${VERSION} [skip ci]"
+          git tag "v${VERSION}"
+          git push origin HEAD "v${VERSION}"
 
       - name: Resolve Version and Tag
         id: get_version
         run: |
           VERSION=$(node -p "require('./package.json').version")
           TAG="v$VERSION"
+          if [ "${{ github.event_name }}" = "push" ] && [ "${{ github.ref_name }}" != "$TAG" ]; then
+            echo "Tag ${{ github.ref_name }} does not match package version $VERSION" >&2
+            exit 1
+          fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "tag_name=$TAG" >> "$GITHUB_OUTPUT"
           echo "Target version is $VERSION (tag: $TAG)"
 
   build-and-release:
-    name: Build & Publish (${{ matrix.os }})
+    name: Build (${{ matrix.platform }})
     needs: prepare-version
     runs-on: ${{ matrix.os }}
     strategy:
@@ -74,14 +120,21 @@ jobs:
       matrix:
         include:
           - os: macos-latest
-            platform: mac
-            name: macOS
+            platform: mac-arm64
+            target: aarch64-apple-darwin
+            args: '--target aarch64-apple-darwin --bundles app,dmg'
+          - os: macos-latest
+            platform: mac-x64
+            target: x86_64-apple-darwin
+            args: '--target x86_64-apple-darwin --bundles app,dmg'
           - os: windows-latest
-            platform: win
-            name: Windows
-          - os: ubuntu-latest
-            platform: linux
-            name: Linux
+            platform: win-x64
+            target: x86_64-pc-windows-msvc
+            args: '--target x86_64-pc-windows-msvc --bundles nsis'
+          - os: ubuntu-22.04
+            platform: linux-x64
+            target: x86_64-unknown-linux-gnu
+            args: '--target x86_64-unknown-linux-gnu --bundles appimage,deb'
 
     steps:
       - name: Checkout code
@@ -96,39 +149,37 @@ jobs:
           node-version: 20
           cache: 'npm'
 
-      - name: Install Linux dependencies
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install Linux system dependencies
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            libarchive-tools \
-            libfuse2
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libssl-dev \
+            build-essential \
+            curl \
+            wget \
+            file
 
-      - name: Install dependencies
+      - name: Install Node dependencies
         run: npm ci || npm install
 
-      - name: Build & Publish Electron App
+      - name: Build Tauri Application
+        uses: tauri-apps/tauri-action@v0
         env:
-          GH_TOKEN: ${{ secrets.TOKEN_GITHUB }}
           GITHUB_TOKEN: ${{ secrets.TOKEN_GITHUB }}
-        run: |
-          if [ "${{ runner.os }}" = "macOS" ]; then
-            npx electron-builder --mac --publish always
-          elif [ "${{ runner.os }}" = "Windows" ]; then
-            npx electron-builder --win --publish always
-          else
-            npx electron-builder --linux --publish always
-          fi
-        shell: bash
-
-      - name: Upload Artifacts
-        uses: actions/upload-artifact@v4
         with:
-          name: aura-build-${{ matrix.platform }}
-          path: |
-            dist/*.dmg
-            dist/*.zip
-            dist/*.exe
-            dist/*.AppImage
-            dist/*.deb
-          if-no-files-found: warn
+          tagName: ${{ needs.prepare-version.outputs.tag_name || github.ref_name }}
+          releaseName: 'Aura v__VERSION__'
+          releaseBody: 'See release notes and assets below.'
+          releaseDraft: false
+          prerelease: false
+          args: ${{ matrix.args }}

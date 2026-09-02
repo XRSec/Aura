@@ -1,126 +1,23 @@
 {
-  "name": "aura-mcp",
+  "name": "aura",
   "productName": "Aura",
   "version": "1.0.1",
-  "description": "A lightweight, zero-config MCP connector.",
-  "main": "src/main.js",
+  "description": "A lightweight, zero-config MCP connector powered by Tauri & Rust.",
+  "author": "XRSec",
+  "license": "MIT",
+  "homepage": "https://github.com/XRSec/Aura",
   "repository": {
     "type": "git",
     "url": "git@github.com:XRSec/Aura.git"
   },
-  "homepage": "https://github.com/XRSec/Aura",
   "scripts": {
-    "start": "electron .",
-    "pack": "CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --dir -c.mac.identity=null",
-    "dist": "electron-builder",
-    "dist:mac": "electron-builder --mac",
-    "dist:win": "electron-builder --win",
-    "dist:linux": "electron-builder --linux"
-  },
-  "build": {
-    "files": [
-      "src/**/*",
-      "!node_modules/**/*.map",
-      "!node_modules/**/*.d.ts",
-      "!node_modules/**/*.d.cts",
-      "!node_modules/**/*.d.mts",
-      "!node_modules/zod/src/**/*"
-    ],
-    "electronLanguages": [
-      "en",
-      "zh_CN",
-      "zh_TW"
-    ],
-    "asarUnpack": [
-      "src/pi-worker.cjs"
-    ],
-    "appId": "fun.xrsec.aura",
-    "productName": "Aura",
-    "directories": {
-      "output": "dist",
-      "buildResources": "build"
-    },
-    "publish": {
-      "provider": "github",
-      "owner": "XRSec",
-      "repo": "Aura"
-    },
-    "mac": {
-      "identity": null,
-      "category": "public.app-category.developer-tools",
-      "icon": "build/icon.icns",
-      "target": [
-        {
-          "target": "dmg",
-          "arch": [
-            "x64",
-            "arm64",
-            "universal"
-          ]
-        },
-        {
-          "target": "zip",
-          "arch": [
-            "x64",
-            "arm64",
-            "universal"
-          ]
-        }
-      ]
-    },
-    "win": {
-      "icon": "build/icon.ico",
-      "target": [
-        {
-          "target": "nsis",
-          "arch": [
-            "x64",
-            "arm64"
-          ]
-        },
-        {
-          "target": "zip",
-          "arch": [
-            "x64",
-            "arm64"
-          ]
-        }
-      ]
-    },
-    "linux": {
-      "icon": "build/icons",
-      "category": "Development",
-      "target": [
-        {
-          "target": "AppImage",
-          "arch": [
-            "x64",
-            "arm64"
-          ]
-        },
-        {
-          "target": "deb",
-          "arch": [
-            "x64",
-            "arm64"
-          ]
-        }
-      ]
-    }
-  },
-  "author": "XRSec",
-  "license": "MIT",
-  "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.30.0",
-    "cors": "^2.8.6",
-    "express": "^5.2.1",
-    "express-rate-limit": "^8.7.0",
-    "uuid": "^14.0.2",
-    "yaml": "^2.9.0",
-    "zod": "^4.5.4"
+    "dev": "tauri dev",
+    "build": "tauri build",
+    "build:mac": "tauri build --bundles app,dmg",
+    "build:win": "tauri build --bundles nsis",
+    "build:linux": "tauri build --bundles appimage,deb"
   },
   "devDependencies": {
-    "electron": "44.1.1",
-    "electron-builder": "^26.15.3"
+    "@tauri-apps/cli": "^2.11.4"
   }
 }

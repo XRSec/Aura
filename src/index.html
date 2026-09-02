@@ -1483,16 +1483,13 @@
         </div>
 
         <div class="setting-row is-dense" id="openai-binary-row" style="display: none;">
-          <div class="setting-label">Tunnel Binary</div>
-          <div class="field-with-action">
-            <div class="input-combobox" id="openai-binary-combobox-wrapper">
-              <input type="text" id="openai-binary-path" placeholder="Auto-detected /path/to/tunnel-client" spellcheck="false" role="combobox" aria-haspopup="listbox" aria-controls="openai-binary-dropdown-menu" aria-expanded="false" aria-label="OpenAI tunnel-client binary path">
-              <button type="button" class="combobox-arrow-btn" id="openai-binary-arrow" title="Choose from detected binaries" aria-label="Choose detected tunnel binary" aria-controls="openai-binary-dropdown-menu" aria-expanded="false">
-                <svg viewBox="0 0 24 24"><path d="M7 10l5 5 5-5z"/></svg>
-              </button>
-              <div class="combobox-dropdown" id="openai-binary-dropdown-menu" style="display: none;" role="listbox" aria-label="Detected tunnel-client binaries"></div>
-            </div>
-            <button type="button" class="btn btn-secondary" id="openai-binary-browse-btn" style="height: 28px; padding: 0 10px; font-size: 11px;">Browse…</button>
+          <div class="setting-label">Binary File Path</div>
+          <div class="input-combobox" id="openai-binary-combobox-wrapper">
+            <input type="text" id="openai-binary-path" placeholder="Auto detect" spellcheck="false" role="combobox" aria-haspopup="listbox" aria-controls="openai-binary-dropdown-menu" aria-expanded="false" aria-label="Tunnel binary file path">
+            <button type="button" class="combobox-arrow-btn" id="openai-binary-arrow" title="Choose binary file path" aria-label="Choose tunnel binary file path" aria-controls="openai-binary-dropdown-menu" aria-expanded="false">
+              <svg viewBox="0 0 24 24"><path d="M7 10l5 5 5-5z"/></svg>
+            </button>
+            <div class="combobox-dropdown" id="openai-binary-dropdown-menu" style="display: none;" role="listbox" aria-label="Tunnel binary file paths"></div>
           </div>
         </div>
 
@@ -1780,6 +1777,7 @@
     </div>
   </div>
 
+  <script src="tauri-shim.js"></script>
   <script src="renderer.js"></script>
 </body>
 </html>

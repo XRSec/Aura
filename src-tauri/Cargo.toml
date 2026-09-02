@@ -1,0 +1,47 @@
+[package]
+name = "aura"
+version = "1.0.1"
+description = "A lightweight, zero-config MCP connector."
+authors = ["XRSec"]
+license = "MIT"
+repository = "https://github.com/XRSec/Aura"
+edition = "2021"
+rust-version = "1.88"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+name = "aura_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.6.3", features = [] }
+
+[dependencies]
+serde_json = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+tauri = { version = "2.11.3", features = [] }
+dirs = "6"
+uuid = { version = "1.20.0", features = ["v4"] }
+serde_yaml = "0.9.34"
+rfd = "0.17.2"
+open = "5.4.3"
+if-addrs = "0.15.0"
+
+rmcp = { version = "3.2.0", features = ["transport-streamable-http-server"] }
+axum = "0.8.9"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "process", "sync", "io-util", "time"] }
+tokio-util = "0.7"
+tower-http = { version = "0.6", features = ["cors"] }
+sha2 = "0.10"
+base64 = "0.22"
+url = "2"
+keyring = "4.2.0"
+path-clean = "1"
+
+[profile.release]
+panic = "abort"
+codegen-units = 1
+lto = true
+opt-level = "s"
+strip = true
