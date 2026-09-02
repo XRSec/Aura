@@ -18,6 +18,19 @@
     "dist:linux": "electron-builder --linux"
   },
   "build": {
+    "files": [
+      "src/**/*",
+      "!node_modules/**/*.map",
+      "!node_modules/**/*.d.ts",
+      "!node_modules/**/*.d.cts",
+      "!node_modules/**/*.d.mts",
+      "!node_modules/zod/src/**/*"
+    ],
+    "electronLanguages": [
+      "en",
+      "zh_CN",
+      "zh_TW"
+    ],
     "asarUnpack": [
       "src/pi-worker.cjs"
     ],

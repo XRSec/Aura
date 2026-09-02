@@ -82,7 +82,6 @@
       border-color: var(--color-border);
     }
 
-    :root[data-theme="light"] .activity-summary-card,
     :root[data-theme="light"] .guide-box {
       background: linear-gradient(180deg, rgb(255 255 255 / 90%) 0%, rgb(248 248 250 / 92%) 100%);
       border-color: var(--color-border);
@@ -960,49 +959,6 @@
     }
 
     /* Activity & Log Styles */
-    .activity-summary-grid {
-      display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 12px;
-      margin-bottom: 14px;
-    }
-    .activity-summary-card {
-      display: flex;
-      flex-direction: column;
-      gap: 5px;
-      padding: 12px 16px;
-      background: linear-gradient(180deg, rgba(255, 255, 255, 0.04) 0%, rgba(255, 255, 255, 0.015) 100%);
-      border: 1px solid rgba(255, 255, 255, 0.08);
-      border-radius: var(--radius-md);
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-    }
-    .activity-summary-card:hover {
-      border-color: rgba(255, 255, 255, 0.15);
-      transform: translateY(-1px);
-    }
-    .activity-summary-card.is-warning {
-      border-color: rgba(251, 191, 36, 0.25);
-      background: linear-gradient(180deg, rgba(251, 191, 36, 0.08) 0%, rgba(251, 191, 36, 0.02) 100%);
-    }
-    .activity-summary-card.is-error {
-      border-color: rgba(248, 113, 113, 0.28);
-      background: linear-gradient(180deg, rgba(248, 113, 113, 0.08) 0%, rgba(248, 113, 113, 0.02) 100%);
-    }
-    .activity-summary-card strong {
-      font-size: 22px;
-      font-weight: 700;
-      font-variant-numeric: tabular-nums;
-      letter-spacing: -0.02em;
-    }
-    .activity-summary-card small {
-      color: var(--color-text-tertiary);
-      font-size: 10.5px;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-    }
-
     .tunnel-level-badge {
       font-family: var(--font-mono);
       font-size: 10px;
@@ -1799,21 +1755,6 @@
 
       <!-- View 1: MCP Requests List (HTTP + Tool Call integrated) -->
       <div id="mcp-log-view" class="log-subtab-view">
-        <div class="activity-summary-grid">
-          <div class="activity-summary-card">
-            <strong id="metric-total-calls">0</strong>
-            <small>Total Tool Requests</small>
-          </div>
-          <div class="activity-summary-card" style="border-color: rgba(64, 201, 119, 0.3); background: rgba(64, 201, 119, 0.05);">
-            <strong id="metric-success-calls" style="color: var(--green-300);">0</strong>
-            <small>Successful</small>
-          </div>
-          <div class="activity-summary-card is-error">
-            <strong id="metric-error-calls" style="color: var(--red-300);">0</strong>
-            <small>Errors / Blocked</small>
-          </div>
-        </div>
-
         <div class="section-heading">Recent MCP Requests</div>
         <div class="activity-table" id="activity-table-container">
           <div class="activity-empty" id="activity-empty-state">Waiting for AI assistant MCP requests...</div>

@@ -106,9 +106,6 @@ const ZH_TRANSLATIONS = {
   'App Runtime': '应用运行时',
   'Copy': '复制',
   'Clear': '清除',
-  'Total Tool Requests': '工具请求总数',
-  'Successful': '成功',
-  'Errors / Blocked': '错误 / 已阻止',
   'Recent MCP Requests': '最近 MCP 请求',
   'Waiting for AI assistant MCP requests...': '等待 AI 助手的 MCP 请求…',
   'Tunnel Process & Diagnostics': '隧道进程与诊断',
@@ -192,7 +189,6 @@ const runtimeLogs = [];
 const MAX_DOM_LOG_ITEMS = 150;
 let currentMainTab = 'settings';
 let pendingLogsRender = { mcp: false, tunnel: false, runtime: false };
-let mcpMetricsRaf = null;
 
 let piCapabilityTools = [];
 let piCapabilitiesLoaded = false;
@@ -227,19 +223,10 @@ function rafThrottle(fn) {
   };
 }
 
-function scheduleUpdateMcpMetrics() {
-  if (mcpMetricsRaf) return;
-  mcpMetricsRaf = requestAnimationFrame(() => {
-    mcpMetricsRaf = null;
-    updateMcpMetrics();
-  });
-}
-
 function flushPendingLogs() {
   if (pendingLogsRender.mcp) {
     renderRecentMcpLogs();
     pendingLogsRender.mcp = false;
-    updateMcpMetrics();
   }
   if (pendingLogsRender.tunnel) {
     renderRecentTunnelLogs();
@@ -256,7 +243,6 @@ window.api.onMcpLog((logEntry) => {
   if (mcpLogs.length > 500) mcpLogs.shift();
   if (currentMainTab === 'logs') {
     renderMcpLogItem(logEntry);
-    scheduleUpdateMcpMetrics();
   } else {
     pendingLogsRender.mcp = true;
   }
@@ -991,16 +977,15 @@ async function loadInitialLogs() {
       mcpLogs.push(...data.mcpLogs);
     }
 
-    if (currentMainTab === 'logs') {
-      renderRecentMcpLogs();
-      renderRecentTunnelLogs();
-      renderRecentRuntimeLogs();
-      updateMcpMetrics();
-    } else {
-      pendingLogsRender.mcp = true;
-      pendingLogsRender.tunnel = true;
-      pendingLogsRender.runtime = true;
-    }
+  if (currentMainTab === 'logs') {
+    renderRecentMcpLogs();
+    renderRecentTunnelLogs();
+    renderRecentRuntimeLogs();
+  } else {
+    pendingLogsRender.mcp = true;
+    pendingLogsRender.tunnel = true;
+    pendingLogsRender.runtime = true;
+  }
   } catch (err) {
     console.error('Failed to load initial logs:', err);
   }
@@ -2342,19 +2327,6 @@ window.api.onUrlUpdated((url) => {
 });
 
 // --- Tab Switcher (Settings / Logs) & Sub-tabs Initialized in switchMainTab/switchLogSubtab ---
-function updateMcpMetrics() {
-  const total = mcpLogs.length;
-  const success = mcpLogs.filter(l => l.result === 'Success').length;
-  const errors = total - success;
-
-  const elTotal = document.getElementById('metric-total-calls');
-  const elSuccess = document.getElementById('metric-success-calls');
-  const elErrors = document.getElementById('metric-error-calls');
-  if (elTotal) elTotal.textContent = String(total);
-  if (elSuccess) elSuccess.textContent = String(success);
-  if (elErrors) elErrors.textContent = String(errors);
-}
-
 function getToolCategoryClass(toolName) {
   const name = String(toolName || '').toLowerCase();
   if (name.includes('read') || name.includes('search') || name.includes('get') || name.includes('list')) return 'tool-read';
@@ -2948,8 +2920,6 @@ async function clearAllLogs() {
     empty.textContent = 'App runtime logs cleared.';
     runtimeContainer.appendChild(empty);
   }
-
-  updateMcpMetrics();
 
   try {
     if (window.api && typeof window.api.clearLogs === 'function') {
