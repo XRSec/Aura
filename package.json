@@ -12,6 +12,7 @@
   },
   "scripts": {
     "dev": "tauri dev",
+    "tauri": "tauri",
     "build": "tauri build",
     "build:mac": "tauri build --bundles app,dmg",
     "build:win": "tauri build --bundles nsis",
