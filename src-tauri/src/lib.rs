@@ -1,4 +1,5 @@
 mod config;
+mod http_logger;
 mod pi;
 mod runtime;
 mod skills;
@@ -527,20 +528,20 @@ fn logs_path() -> PathBuf {
 
 #[tauri::command]
 fn get_recent_logs() -> Value {
-    fs::read_to_string(logs_path())
-        .ok()
-        .and_then(|text| serde_json::from_str::<Value>(&text).ok())
-        .unwrap_or_else(|| json!({"appRuntimeLogs": [], "tunnelLogs": [], "mcpLogs": []}))
+    runtime::recent_logs()
 }
 
 #[tauri::command]
 fn clear_recent_logs() -> Result<Value, String> {
-    let empty = json!({"mcpLogs": [], "tunnelLogs": [], "appRuntimeLogs": []});
-    fs::write(
+    runtime::clear_recent_logs();
+    let empty = json!({"mcpLogs": [], "tunnelLogs": [], "appRuntimeLogs": [], "httpLogs": []});
+    if let Some(parent) = logs_path().parent() {
+        let _ = fs::create_dir_all(parent);
+    }
+    let _ = fs::write(
         logs_path(),
         serde_json::to_vec_pretty(&empty).map_err(|error| error.to_string())?,
-    )
-    .map_err(|error| error.to_string())?;
+    );
     Ok(json!({"ok": true}))
 }
 
@@ -624,11 +625,125 @@ fn validate_ssl_files(cert_path: String, key_path: String) -> Value {
     json!({"valid": true})
 }
 
+struct QuitState(std::sync::atomic::AtomicBool);
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let builder = tauri::Builder::default()
         .manage(runtime::RuntimeManager::new())
         .setup(|app| {
+            app.manage(QuitState(std::sync::atomic::AtomicBool::new(false)));
+
+            // 1. Setup Application Menu (Top Bar)
+            let reload_i =
+                tauri::menu::MenuItem::with_id(app, "reload", "Reload", true, Some("CmdOrCtrl+R"))?;
+
+            #[cfg(target_os = "macos")]
+            let app_menu = {
+                let aura = tauri::menu::Submenu::with_items(
+                    app,
+                    "Aura",
+                    true,
+                    &[
+                        &tauri::menu::PredefinedMenuItem::about(app, None, None)?,
+                        &tauri::menu::PredefinedMenuItem::separator(app)?,
+                        &tauri::menu::PredefinedMenuItem::close_window(app, Some("Close Aura"))?,
+                        &tauri::menu::PredefinedMenuItem::separator(app)?,
+                        &tauri::menu::PredefinedMenuItem::services(app, None)?,
+                        &tauri::menu::PredefinedMenuItem::separator(app)?,
+                        &tauri::menu::PredefinedMenuItem::quit(app, None)?,
+                    ],
+                )?;
+                let view = tauri::menu::Submenu::with_items(
+                    app,
+                    "View",
+                    true,
+                    &[
+                        &reload_i,
+                        &tauri::menu::PredefinedMenuItem::separator(app)?,
+                        &tauri::menu::PredefinedMenuItem::fullscreen(app, None)?,
+                        &tauri::menu::PredefinedMenuItem::separator(app)?,
+                        &tauri::menu::PredefinedMenuItem::minimize(app, None)?,
+                        &tauri::menu::PredefinedMenuItem::separator(app)?,
+                        &tauri::menu::PredefinedMenuItem::hide(app, None)?,
+                        &tauri::menu::PredefinedMenuItem::hide_others(app, None)?,
+                        &tauri::menu::PredefinedMenuItem::show_all(app, None)?,
+                    ],
+                )?;
+                let edit = tauri::menu::Submenu::with_items(
+                    app,
+                    "Edit",
+                    true,
+                    &[
+                        &tauri::menu::PredefinedMenuItem::undo(app, None)?,
+                        &tauri::menu::PredefinedMenuItem::redo(app, None)?,
+                        &tauri::menu::PredefinedMenuItem::separator(app)?,
+                        &tauri::menu::PredefinedMenuItem::cut(app, None)?,
+                        &tauri::menu::PredefinedMenuItem::copy(app, None)?,
+                        &tauri::menu::PredefinedMenuItem::paste(app, None)?,
+                        &tauri::menu::PredefinedMenuItem::select_all(app, None)?,
+                    ],
+                )?;
+                tauri::menu::Menu::with_items(app, &[&aura, &edit, &view])?
+            };
+
+            #[cfg(not(target_os = "macos"))]
+            let app_menu = {
+                let view = tauri::menu::Submenu::with_items(app, "View", true, &[&reload_i])?;
+                tauri::menu::Menu::with_items(app, &[&view])?
+            };
+
+            let _ = app.set_menu(app_menu);
+
+            // 2. Setup Tray Icon Menu
+            let tray_quit_i =
+                tauri::menu::MenuItem::with_id(app, "tray_quit", "Quit", true, None::<&str>)?;
+            let tray_show_i =
+                tauri::menu::MenuItem::with_id(app, "tray_show", "Show Aura", true, None::<&str>)?;
+            let tray_menu = tauri::menu::Menu::with_items(app, &[&tray_show_i, &tray_quit_i])?;
+
+            let mut tray = tauri::tray::TrayIconBuilder::new()
+                .menu(&tray_menu)
+                .on_menu_event(|app, event| match event.id().as_ref() {
+                    "tray_quit" => {
+                        app.state::<QuitState>()
+                            .0
+                            .store(true, std::sync::atomic::Ordering::SeqCst);
+                        app.exit(0);
+                    }
+                    "tray_show" => {
+                        if let Some(window) = app.get_webview_window("main") {
+                            let _ = window.show();
+                            let _ = window.set_focus();
+                            #[cfg(target_os = "macos")]
+                            let _ = app.set_activation_policy(tauri::ActivationPolicy::Regular);
+                        }
+                    }
+                    _ => {}
+                })
+                .on_tray_icon_event(|tray, event| {
+                    if let tauri::tray::TrayIconEvent::Click {
+                        button: tauri::tray::MouseButton::Left,
+                        ..
+                    } = event
+                    {
+                        if let Some(window) = tray.app_handle().get_webview_window("main") {
+                            let _ = window.show();
+                            let _ = window.set_focus();
+                            #[cfg(target_os = "macos")]
+                            let _ = tray
+                                .app_handle()
+                                .set_activation_policy(tauri::ActivationPolicy::Regular);
+                        }
+                    }
+                });
+
+            if let Some(icon) = app.default_window_icon() {
+                tray = tray.icon(icon.clone());
+            }
+            tray.build(app)?;
+
+            // 3. Auto connect tunnel
             if config::load()
                 .get("autoConnect")
                 .and_then(Value::as_bool)
@@ -643,6 +758,26 @@ pub fn run() {
                 });
             }
             Ok(())
+        })
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                let state = window.app_handle().state::<QuitState>();
+                if !state.0.load(std::sync::atomic::Ordering::SeqCst) {
+                    api.prevent_close();
+                    let _ = window.hide();
+                    #[cfg(target_os = "macos")]
+                    let _ = window
+                        .app_handle()
+                        .set_activation_policy(tauri::ActivationPolicy::Accessory);
+                }
+            }
+        })
+        .on_menu_event(|app, event| {
+            if event.id().as_ref() == "reload" {
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.eval("window.location.reload();");
+                }
+            }
         })
         .invoke_handler(tauri::generate_handler![
             get_config,
@@ -667,9 +802,18 @@ pub fn run() {
             pick_cert_file,
             pick_key_file,
             validate_ssl_files
-        ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        ]);
+
+    let app = builder
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application");
+
+    app.run(|app_handle, event| {
+        if let tauri::RunEvent::ExitRequested { .. } = event {
+            let state = app_handle.state::<QuitState>();
+            state.0.store(true, std::sync::atomic::Ordering::SeqCst);
+        }
+    });
 }
 
 #[cfg(test)]

@@ -50,7 +50,7 @@ const CHATGPT_CALLBACK_PREFIX: &str = "https://chatgpt.com/connector/oauth/";
 const KEYRING_SERVICE: &str = "fun.xrsec.aura";
 const KEYRING_ACCOUNT: &str = "admin-password";
 
-fn now_ms() -> u64 {
+pub fn now_ms() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
@@ -693,6 +693,7 @@ fn resolve_safe_path(fs_root: &str, target: &str) -> Result<PathBuf, String> {
 
 #[derive(Clone)]
 struct AuraMcpServer {
+    app: Option<tauri::AppHandle>,
     tool_router: ToolRouter<Self>,
     config: Value,
     pi: Option<Arc<PiBridge>>,
@@ -708,7 +709,31 @@ impl std::fmt::Debug for AuraMcpServer {
 }
 
 impl AuraMcpServer {
-    fn new(config: Value, pi: Option<Arc<PiBridge>>) -> Self {
+    fn log_execution(
+        &self,
+        tool: &str,
+        params: serde_json::Value,
+        result: &str,
+        output: Option<String>,
+        error: Option<String>,
+        duration: u64,
+    ) {
+        if let Some(app) = &self.app {
+            let entry = serde_json::json!({
+                "timestamp": crate::runtime::now_ms(),
+                "tool": tool,
+                "params": params,
+                "result": result,
+                "output": output.map(serde_json::Value::String).unwrap_or(serde_json::Value::Null),
+                "error": error.map(serde_json::Value::String).unwrap_or(serde_json::Value::Null),
+                "duration": duration,
+                "http": serde_json::Value::Null
+            });
+            crate::runtime::emit_mcp_log(app, entry);
+        }
+    }
+
+    fn new(app: Option<tauri::AppHandle>, config: Value, pi: Option<Arc<PiBridge>>) -> Self {
         let mut tool_router = Self::tool_router();
         let enabled = config
             .get("defaultCapabilitiesEnabled")
@@ -818,6 +843,7 @@ impl AuraMcpServer {
         }
 
         Self {
+            app,
             tool_router,
             config,
             pi,
@@ -836,11 +862,42 @@ impl AuraMcpServer {
 impl AuraMcpServer {
     #[tool(description = "Read a UTF-8 file inside Aura Filesystem Root.")]
     async fn read_file(&self, Parameters(request): Parameters<ReadFileRequest>) -> String {
-        match resolve_safe_path(self.fs_root(), &request.path)
+        let started = std::time::Instant::now();
+        let result = match resolve_safe_path(self.fs_root(), &request.path)
             .and_then(|path| fs::read_to_string(path).map_err(|error| error.to_string()))
         {
-            Ok(content) => content,
-            Err(error) => format!("Error: {error}"),
+            Ok(content) => Ok(content),
+            Err(error) => Err(error),
+        };
+        let duration = started.elapsed().as_millis() as u64;
+        match result {
+            Ok(content) => {
+                let mut truncated = content.clone();
+                if truncated.len() > 5000 {
+                    truncated.truncate(5000);
+                    truncated.push_str(&format!("... [truncated {} chars]", content.len()));
+                }
+                self.log_execution(
+                    "read_file",
+                    serde_json::json!({"path": request.path}),
+                    "Success",
+                    Some(truncated),
+                    None,
+                    duration,
+                );
+                content
+            }
+            Err(error) => {
+                self.log_execution(
+                    "read_file",
+                    serde_json::json!({"path": request.path}),
+                    "Error",
+                    None,
+                    Some(error.clone()),
+                    duration,
+                );
+                format!("Error: {error}")
+            }
         }
     }
 
@@ -1209,7 +1266,16 @@ impl RuntimeManager {
             let server_pi = pi.clone();
             let mcp_service: StreamableHttpService<AuraMcpServer, LocalSessionManager> =
                 StreamableHttpService::new(
-                    move || Ok(AuraMcpServer::new(server_config.clone(), server_pi.clone())),
+                    {
+                        let app = app.clone();
+                        move || {
+                            Ok(AuraMcpServer::new(
+                                Some(app.clone()),
+                                server_config.clone(),
+                                server_pi.clone(),
+                            ))
+                        }
+                    },
                     Default::default(),
                     stream_config,
                 );
@@ -1223,8 +1289,13 @@ impl RuntimeManager {
                     .and_then(Value::as_str)
                     .map(ToOwned::to_owned),
             });
+            let http_logger_state = Some(app.clone());
             let protected = Router::new()
                 .nest_service(&mcp_path, mcp_service)
+                .layer(middleware::from_fn_with_state(
+                    http_logger_state,
+                    crate::http_logger::log_http_request,
+                ))
                 .route_layer(middleware::from_fn_with_state(
                     web_state.clone(),
                     authorize_mcp,
@@ -1961,7 +2032,16 @@ mod tests {
         let server_config = test_cfg.clone();
         let mcp_service: StreamableHttpService<AuraMcpServer, LocalSessionManager> =
             StreamableHttpService::new(
-                move || Ok(AuraMcpServer::new(server_config.clone(), None)),
+                {
+                    let app = app.clone();
+                    move || {
+                        Ok(AuraMcpServer::new(
+                            Some(app.clone()),
+                            server_config.clone(),
+                            None,
+                        ))
+                    }
+                },
                 Default::default(),
                 stream_config,
             );
@@ -1972,8 +2052,13 @@ mod tests {
             resource_url: "https://t.xrsec.fun/test-mcp".into(),
             admin_secret_marker: None,
         });
+        let http_logger_state = app.clone();
         let protected = Router::new()
             .nest_service(mcp_path, mcp_service)
+            .layer(middleware::from_fn_with_state(
+                Some(http_logger_state),
+                crate::http_logger::log_http_request,
+            ))
             .route_layer(middleware::from_fn_with_state(
                 web_state.clone(),
                 authorize_mcp,
@@ -2185,4 +2270,120 @@ mod tests {
         let _ = fs::remove_file(auth_path);
         let _ = fs::remove_dir_all(temp_root);
     }
+}
+
+#[derive(Default)]
+pub struct RecentLogs {
+    mcp: Vec<serde_json::Value>,
+    tunnel: Vec<serde_json::Value>,
+    runtime: Vec<serde_json::Value>,
+    http: Vec<serde_json::Value>,
+}
+
+impl RecentLogs {
+    fn load() -> Self {
+        let path = crate::config::config_path().with_file_name("aura-logs.json");
+        let value = std::fs::read_to_string(&path)
+            .ok()
+            .and_then(|text| serde_json::from_str::<serde_json::Value>(&text).ok())
+            .unwrap_or_default();
+        let tail = |key: &str, limit: usize| {
+            let values = value
+                .get(key)
+                .and_then(serde_json::Value::as_array)
+                .cloned()
+                .unwrap_or_default();
+            values
+                .into_iter()
+                .rev()
+                .take(limit)
+                .collect::<Vec<_>>()
+                .into_iter()
+                .rev()
+                .collect()
+        };
+        Self {
+            mcp: tail("mcpLogs", 500),
+            tunnel: tail("tunnelLogs", 1000),
+            runtime: tail("appRuntimeLogs", 1000),
+            http: tail("httpLogs", 500),
+        }
+    }
+
+    fn save(&self) {
+        let path = crate::config::config_path().with_file_name("aura-logs.json");
+        if let Some(parent) = path.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        let value = serde_json::json!({
+            "mcpLogs": self.mcp,
+            "tunnelLogs": self.tunnel,
+            "appRuntimeLogs": self.runtime,
+            "httpLogs": self.http,
+        });
+        let _ = std::fs::write(path, serde_json::to_vec_pretty(&value).unwrap_or_default());
+    }
+}
+
+fn recent_logs_store() -> &'static std::sync::Mutex<RecentLogs> {
+    static STORE: std::sync::OnceLock<std::sync::Mutex<RecentLogs>> = std::sync::OnceLock::new();
+    STORE.get_or_init(|| std::sync::Mutex::new(RecentLogs::load()))
+}
+
+fn with_recent_logs<T>(f: impl FnOnce(&mut RecentLogs) -> T) -> T {
+    let mut logs = recent_logs_store()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    f(&mut logs)
+}
+
+fn push_recent_log(kind: &str, entry: &serde_json::Value) {
+    with_recent_logs(|logs| {
+        let (items, limit) = match kind {
+            "mcp" => (&mut logs.mcp, 500),
+            "http" => (&mut logs.http, 500),
+            "tunnel" => (&mut logs.tunnel, 1000),
+            _ => (&mut logs.runtime, 1000),
+        };
+        items.push(entry.clone());
+        if items.len() > limit {
+            items.remove(0);
+        }
+        logs.save();
+    });
+}
+
+pub fn recent_logs() -> serde_json::Value {
+    with_recent_logs(|logs| {
+        serde_json::json!({
+            "mcpLogs": logs.mcp.clone(),
+            "httpLogs": logs.http.clone(),
+            "tunnelLogs": logs.tunnel.clone(),
+            "appRuntimeLogs": logs.runtime.clone()
+        })
+    })
+}
+
+pub fn clear_recent_logs() {
+    with_recent_logs(|logs| *logs = RecentLogs::default());
+}
+
+pub fn emit_mcp_log(app: &tauri::AppHandle, entry: serde_json::Value) {
+    push_recent_log("mcp", &entry);
+    let _ = tauri::Emitter::emit(app, "mcp-log", entry);
+}
+
+pub fn emit_http_log(app: &tauri::AppHandle, entry: serde_json::Value) {
+    // Convert it to an MCP log format so the frontend can render it!
+    let formatted = serde_json::json!({
+        "timestamp": entry.get("timestamp").cloned().unwrap_or(serde_json::json!(crate::runtime::now_ms())),
+        "tool": serde_json::Value::Null,
+        "params": serde_json::Value::Null,
+        "result": if entry.get("status").and_then(|s| s.as_u64()).unwrap_or(200) >= 400 { "Error" } else { "Success" },
+        "output": serde_json::Value::Null,
+        "error": serde_json::Value::Null,
+        "duration": entry.get("duration").cloned().unwrap_or(serde_json::json!(0)),
+        "http": entry
+    });
+    emit_mcp_log(app, formatted);
 }

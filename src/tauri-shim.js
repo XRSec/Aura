@@ -36,6 +36,7 @@
     onUrlUpdated: callback => on('url-updated', callback),
     onServiceStateChanged: callback => on('service-state-changed', callback),
     onMcpLog: callback => on('mcp-log', callback),
+    onHttpLog: callback => on('http-log', callback),
     onTunnelLog: callback => on('tunnel-log', callback),
     onRuntimeLog: callback => on('runtime-log', callback)
   };
