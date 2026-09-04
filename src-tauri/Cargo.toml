@@ -1,6 +1,6 @@
 [package]
 name = "aura"
-version = "1.0.2"
+version = "1.0.3"
 description = "A lightweight, zero-config MCP connector."
 authors = ["XRSec"]
 license = "MIT"
