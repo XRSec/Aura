@@ -21,6 +21,8 @@
     saveConfig: cfg => invoke('save_config', { cfg }),
     saveProviderConfig: (mode, updates) => invoke('save_provider_config', { mode, updates }),
     getTokens: () => invoke('get_tokens'),
+    getAppVersion: () => invoke('get_app_version'),
+    logRuntime: (level, message) => invoke('log_runtime', { level, message }),
     getRecentLogs: () => invoke('get_recent_logs'),
     clearLogs: () => invoke('clear_recent_logs'),
     revokeToken: token => invoke('revoke_token', { token }),

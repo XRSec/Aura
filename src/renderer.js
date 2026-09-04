@@ -12,14 +12,22 @@ const shellPolicyLabels = {
 };
 
 const ZH_TRANSLATIONS = {
+  'Aura - MCP Connector': 'Aura - MCP 连接器',
+  'MCP Server': 'MCP 服务器',
   'Settings': '设置',
   'Logs': '日志',
   'Stopped': '已停止',
+  'Connecting...': '连接中...',
+  'Stopping...': '停止中...',
   'Running': '运行中',
   'Connect': '连接',
   'Disconnect': '断开连接',
   'Connector Configuration': '连接器配置',
   'Configure local tools, network tunnels, and authorization credentials for AI assistants.': '配置 AI 助手使用的本地工具、网络隧道和授权凭据。',
+  'Update available': '发现新版本',
+  'Current version:': '当前版本：',
+  'Latest release:': '最新版本：',
+  'View release': '查看更新',
   'General': '常规',
   'Auto Connect': '自动连接',
   'Automatically start server & tunnel on app launch': '应用启动时自动启动服务器和隧道',
@@ -41,22 +49,48 @@ const ZH_TRANSLATIONS = {
   'Binary File Path': '二进制文件路径',
   'Auto detect': '自动检测',
   'Auto detect (recommended)': '自动检测（推荐）',
+  'Loopback only': '仅本地回环',
+  'All network interfaces': '所有网络接口',
+  'Saved address': '已保存的地址',
+     'Wi-Fi': '无线网络',
+  'Thunderbolt Bridge': '雷雳网桥',
+  'Ethernet': '以太网',
+  'ChatGPT Connector Setup': 'ChatGPT 连接器设置',
+  'ChatGPT / Claude Setup': 'ChatGPT / Claude 设置',
+  'Private Channel': '专属私密隧道',
+  'Authentication': '身份验证',
+  'None (Outbound Ingress)': '无 (反向代理隧道)',
+  'Connection Type': '连接类型',
+  'Tunnel': '隧道 (Tunnel)',
+  'Server URL': '服务器 URL (Server URL)',
+  'Auth Method': '验证方式',
+  'OAuth 2.1 (Web Passcode)': 'OAuth 2.1 (Web 授权码)',
+  'In ChatGPT Custom App setup, select "Tunnel" and provide this Tunnel ID. No public URL or OAuth endpoint required.': '在 ChatGPT 自定义应用设置中，请选择 "Tunnel"（隧道）并填入此 Tunnel ID。无需提供公共 URL 或 OAuth 端点。',
+  'Paste the Server URL into ChatGPT. Double-click any parameter to copy.': '将 Server URL 粘贴到 ChatGPT 即可。双击任意参数可直接复制。',
   'Detected': '已检测',
   'Common path': '常见路径',
   'Browse…': '浏览…',
   'Tunnel ID': '隧道 ID',
   'Tunnel API Key': '隧道 API Key',
+  'Pi Binary Path': 'Pi 程序路径',
+  'Leave empty to let Aura locate Pi automatically.': '留空时由 Aura 自动定位 Pi 程序。',
+  'Auto detect (e.g. ~/.nvm/versions/node/v20/bin/pi)': '自动检测 (例如 ~/.nvm/versions/node/v20/bin/pi)',
   'Show': '显示',
   'Hide': '隐藏',
   'Config File': '配置文件',
   'SSL Certificate': 'SSL 证书',
   'SSL Private Key': 'SSL 私钥',
   'MCP Endpoint URL': 'MCP 端点 URL',
-  'Tunnel Setup': '隧道设置',
+  'Tunnel start timeout': '隧道启动超时',
+  'Cloudflare tunnel failed to start within the timeout. Please check if your cloudflared config (config.yml) is correct and the token/credentials are valid.': 'Cloudflare 隧道未能按时启动。请检查您的 cloudflared 配置文件 (config.yml) 是否正确，或是否需要更新授权。',
+  'Cloudflare Quick Tunnel failed to start within the timeout. It may be blocked by your network or Cloudflare is currently experiencing delays.': 'Cloudflare 快速隧道未能按时启动。可能是网络限制，或者 Cloudflare 服务器有延迟。',
+  'OpenAI tunnel failed to start within the timeout. Please check your network connection and verify your Tunnel ID/API Key.': 'OpenAI 隧道未能按时启动。请检查网络连接以及您的 Tunnel ID / API Key 是否正确。',
+  'Tunnel failed to start within the timeout. Please check your network and configuration.': '隧道未能按时启动。请检查网络和相关配置。',
   'Requires Cloudflare config in Named/Quick tunnel mode.': 'Named/Quick 隧道模式需要 Cloudflare 配置。',
   'Open setup docs': '打开设置文档',
   'Save': '保存',
   'Saved ✓': '已保存 ✓',
+  'Requires OpenAI tunnel-client setup.': '需要 OpenAI tunnel-client 配置。',
   'Debug mode enabled (verbose logging)': '调试模式已启用（详细日志）',
   'Debug mode disabled': '调试模式已关闭',
   'No active tokens': '暂无活跃令牌',
@@ -68,6 +102,9 @@ const ZH_TRANSLATIONS = {
   'Token revoked': '令牌已撤销',
   'Failed to revoke token': '撤销令牌失败',
   'Connection Guide': '连接指南',
+  'Tunnel Setup': '隧道配置向导',
+  'Search tools...': '搜索工具...',
+  'Search logs, tools, messages...': '搜索日志、工具、消息...',
   'Access & Authorization': '访问与授权',
   'Admin Password': '管理员密码',
   'Set once, used for all OAuth approval screens.': '设置一次，用于所有 OAuth 授权页面。',
@@ -75,6 +112,7 @@ const ZH_TRANSLATIONS = {
   'Reset required — enter a new password': '需要重置——请输入新的管理密码',
   'Active Connections': '活跃连接',
   'OpenAI Secure Ingress Managed': 'OpenAI 安全入口已托管',
+  'Traffic is securely routed outbound using the configured Tunnel ID and API Key. OAuth 2.1 passcode authorization and Access Token management are not required in this mode.': '流量已通过配置的 Tunnel ID 和 API Key 安全路由出站。在此模式下，无需再进行 OAuth 2.1 验证码授权或管理 Access Token。',
   'No active connections.': '暂无活跃连接。',
   'Refresh Tokens': '刷新令牌',
   'MCP Instructions & Capabilities': 'MCP 指令与能力',
@@ -90,8 +128,7 @@ const ZH_TRANSLATIONS = {
   'Loading Pi tools...': '正在加载 Pi 工具…',
   'Select visible': '选择当前可见',
   'Clear visible': '清除当前可见',
-  'All plugins': '全部插件',
-  'Enable Pi capabilities to load the available tool registry.': '启用 Pi 能力以加载可用工具注册表。',
+     'Enable Pi capabilities to load the available tool registry.': '启用 Pi 能力以加载可用工具注册表。',
   'Local Tool Sandbox': '本地工具沙箱',
   'Filesystem Root': '文件系统根目录',
   'Shell Policy': 'Shell 策略',
@@ -109,8 +146,7 @@ const ZH_TRANSLATIONS = {
   'Activity & Diagnostic Logs': '活动与诊断日志',
   'Monitor real-time MCP tool invocations, protocol payloads, and system tunnel diagnostics.': '监控实时 MCP 工具调用、协议载荷和系统隧道诊断。',
   'MCP Requests': 'MCP 请求',
-  'Tunnel': '隧道',
-  'App Runtime': '应用运行时',
+   'App Runtime': '应用运行时',
   'Copy': '复制',
   'Clear': '清除',
   'Recent MCP Requests': '最近 MCP 请求',
@@ -118,7 +154,105 @@ const ZH_TRANSLATIONS = {
   'Tunnel Process & Diagnostics': '隧道进程与诊断',
   'Waiting for tunnel events...': '等待隧道事件…',
   'App Runtime & Lifecycle': '应用运行时与生命周期',
-  'Waiting for app runtime events...': '等待应用运行时事件…'
+  'Waiting for app runtime events...': '等待应用运行时事件…',
+  'Cloudflare Named Tunnel': 'Cloudflare 命名隧道',
+  'Cloudflare Quick Tunnel': 'Cloudflare 快速隧道',
+  'OpenAI Secure MCP Tunnel': 'OpenAI 安全 MCP 隧道',
+  'Custom / Bring Your Own Tunnel': '自定义 / 使用自己的隧道',
+  'Restarting...': '正在重启...',
+  'All plugins': '全部插件',
+  'Pi Built-in': 'Pi 内置',
+  'Unknown source': '未知来源',
+  'No default capabilities available.': '暂无可用的 Aura 默认能力。',
+  'No Pi tools discovered.': '未发现 Pi 工具。',
+  'No matching Pi tools.': '没有匹配的 Pi 工具。',
+  'May use Pi model tokens': '可能消耗 Pi 模型额度',
+  'No description provided.': '暂无说明。',
+  'Loading Pi tool registry...': '正在加载 Pi 工具注册表…',
+  'Pi unavailable': 'Pi 不可用',
+  'installation not found': '未找到安装',
+  'You may need to download the tunnel binary:': '可能需要下载隧道程序：',
+  'OpenAI tunnel-client (Releases)': 'OpenAI tunnel-client（发布版本）',
+  'Cloudflare cloudflared (Releases)': 'Cloudflare cloudflared（发布版本）',
+  'Close': '关闭',
+  'failed': '失败',
+  'Saved, but service start failed': '已保存，但服务启动失败',
+  'Saved, but service restart failed': '已保存，但服务重启失败',
+  'Enter a valid port between 1 and 65535': '请输入 1 到 65535 之间的有效端口',
+  'Failed to save settings': '保存设置失败',
+  'Enter a password to save': '请输入密码后再保存',
+  'Failed to save MCP/Pi settings': '保存 MCP/Pi 设置失败',
+  'Double click to copy': '双击复制',
+  'Copied ✓': '已复制 ✓',
+  'Copy Failed': '复制失败',
+  'Cleared ✓': '已清除 ✓',
+  'Failed': '失败',
+  'ingress rule': '入口规则',
+  'Discovery': '发现机制',
+  'CIMD + PRM Enabled': 'CIMD + PRM 已启用',
+  'Inbound HTTP Context': '入站 HTTP 上下文',
+  'Tool Arguments': '工具参数',
+  'Response Output': '响应输出',
+  'Error Detail': '错误详情',
+  '(No response output)': '（无响应输出）',
+  'Event Details': '事件详情',
+  'Runtime Details': '运行时详情',
+  '(No extra details)': '（无更多详情）',
+  'Waiting for runtime events...': '等待运行时事件…',
+  'Logs cleared. Waiting for new activity...': '日志已清除，等待新的活动…',
+  'Tunnel logs cleared.': '隧道日志已清除。',
+  'App runtime logs cleared.': '应用运行时日志已清除。',
+  'Optional SSL: Auto-scans ~/.acme.sh for certificates or select local cert/key for HTTPS proxy.': '可选 SSL：自动扫描 ~/.acme.sh 中的证书，或选择本地证书/私钥用于 HTTPS 代理。',
+  'Select Language': '选择语言',
+  'Select language': '选择语言',
+  'Languages': '语言列表',
+  'Select Appearance': '选择外观',
+  'Select appearance': '选择外观',
+  'Appearance modes': '外观模式',
+  'Tunnel mode': '隧道模式',
+  'Select Tunnel Mode': '选择隧道模式',
+  'Select tunnel mode': '选择隧道模式',
+  'Tunnel modes': '隧道模式列表',
+  'MCP listen address': 'MCP 监听地址',
+  'Select MCP listen address': '选择 MCP 监听地址',
+  'MCP listen addresses': 'MCP 监听地址列表',
+  'MCP listen port': 'MCP 监听端口',
+  'Tunnel binary file path': '隧道程序文件路径',
+  'Choose binary file path': '选择程序文件路径',
+  'Choose tunnel binary file path': '选择隧道程序文件路径',
+  'Tunnel binary file paths': '隧道程序文件路径列表',
+  'OpenAI Tunnel ID': 'OpenAI 隧道 ID',
+  'OpenAI Tunnel API Key': 'OpenAI 隧道 API Key',
+  'Show/Hide API Key': '显示/隐藏 API Key',
+  'Cloudflare config file path': 'Cloudflare 配置文件路径',
+  'Choose from detected cloudflared config files': '从检测到的 cloudflared 配置文件中选择',
+  'Choose detected Cloudflare config file': '选择检测到的 Cloudflare 配置文件',
+  'Detected Cloudflare config files': '检测到的 Cloudflare 配置文件',
+  'SSL Certificate path': 'SSL 证书路径',
+  'Choose from detected acme.sh certificates': '从检测到的 acme.sh 证书中选择',
+  'Choose detected SSL certificate': '选择检测到的 SSL 证书',
+  'Detected SSL certificates': '检测到的 SSL 证书',
+  'SSL Private Key path': 'SSL 私钥路径',
+  'MCP endpoint URL': 'MCP 端点 URL',
+  'Choose from detected cloudflared hostnames': '从检测到的 cloudflared 主机名中选择',
+  'Choose detected Cloudflare hostname': '选择检测到的 Cloudflare 主机名',
+  'Detected Cloudflare hostnames': '检测到的 Cloudflare 主机名',
+  'Set a secure password for OAuth approvals': '设置用于 OAuth 审批的安全密码',
+  'MCP server instructions': 'MCP 服务器指令',
+  'Use default Aura capabilities': '使用 Aura 默认能力',
+  'Use Pi capabilities': '使用 Pi 能力',
+  'Pi binary file path': 'Pi 程序文件路径',
+  'Search Pi tools': '搜索 Pi 工具',
+  'Filter Pi tools by plugin': '按插件筛选 Pi 工具',
+  'Pi tool plugins': 'Pi 工具插件',
+  'Shell policy': 'Shell 策略',
+  'Select Shell Policy': '选择 Shell 策略',
+  'Select shell policy': '选择 Shell 策略',
+  'Shell policies': 'Shell 策略列表',
+  'e.g. ~/ or /Users/yourname/Projects': '例如 ~/ 或 /Users/yourname/Projects',
+  'e.g. ls, git, npm': '例如 ls、git、npm',
+  'e.g. rm, mkfs': '例如 rm、mkfs',
+  'e.g. ~/.acme.sh/domain/fullchain.cer': '例如 ~/.acme.sh/domain/fullchain.cer'
 };
 
 let currentLanguage = 'en';
@@ -127,6 +261,72 @@ let currentServiceRunning = false;
 
 function t(text) {
   return currentLanguage === 'zh-CN' ? (ZH_TRANSLATIONS[text] || text) : text;
+}
+
+const AURA_LATEST_RELEASE_API = 'https://api.github.com/repos/XRSec/Aura/releases/latest';
+
+function parseAppVersion(value) {
+  const match = String(value || '').trim().match(/^v?(\d+)\.(\d+)\.(\d+)(?:[-+].*)?$/i);
+  return match ? match.slice(1, 4).map(Number) : null;
+}
+
+function isNewerAppVersion(latest, current) {
+  const latestParts = parseAppVersion(latest);
+  const currentParts = parseAppVersion(current);
+  if (!latestParts || !currentParts) return null;
+  for (let index = 0; index < 3; index += 1) {
+    if (latestParts[index] !== currentParts[index]) {
+      return latestParts[index] > currentParts[index];
+    }
+  }
+  return false;
+}
+
+async function logUpdateCheckFailure(error) {
+  const message = error?.message || String(error);
+  try {
+    await window.api.logRuntime('warn', `GitHub release check failed: ${message}`);
+  } catch (_) {
+    // Runtime logging must never interfere with app startup.
+  }
+}
+
+function showUpdateNotice(currentVersion, release) {
+  const notice = document.getElementById('update-notice');
+  const current = document.getElementById('update-current-version');
+  const latest = document.getElementById('update-latest-version');
+  const button = document.getElementById('update-release-btn');
+  if (!notice || !current || !latest || !button) return;
+
+  current.textContent = currentVersion;
+  latest.textContent = release.tag_name;
+  button.onclick = () => window.api.openExternal(release.html_url);
+  notice.style.display = 'flex';
+}
+
+async function checkForAppUpdate() {
+  try {
+    const currentVersion = await window.api.getAppVersion();
+    const response = await fetch(AURA_LATEST_RELEASE_API, {
+      headers: { Accept: 'application/vnd.github+json' }
+    });
+    if (!response.ok) {
+      throw new Error(`GitHub Releases returned HTTP ${response.status}`);
+    }
+
+    const release = await response.json();
+    if (!release?.tag_name || !release?.html_url) {
+      throw new Error('GitHub Releases response is missing tag_name or html_url');
+    }
+
+    const isNewer = isNewerAppVersion(release.tag_name, currentVersion);
+    if (isNewer === null) {
+      throw new Error(`Unable to compare versions: current=${currentVersion}, latest=${release.tag_name}`);
+    }
+    if (isNewer) showUpdateNotice(currentVersion, release);
+  } catch (error) {
+    await logUpdateCheckFailure(error);
+  }
 }
 
 function localizeStaticText(language) {
@@ -150,6 +350,20 @@ function localizeStaticText(language) {
       : node.__auraEnglishText;
     node.nodeValue = `${node.__auraPrefix}${translated}${node.__auraSuffix}`;
   });
+
+  document.querySelectorAll('[placeholder], [title], [aria-label]').forEach(element => {
+    element.__auraEnglishAttributes ||= {};
+    for (const attribute of ['placeholder', 'title', 'aria-label']) {
+      const current = element.getAttribute(attribute);
+      if (!current) continue;
+      if (!element.__auraEnglishAttributes[attribute] && ZH_TRANSLATIONS[current]) {
+        element.__auraEnglishAttributes[attribute] = current;
+      }
+      const english = element.__auraEnglishAttributes[attribute];
+      if (!english) continue;
+      element.setAttribute(attribute, language === 'zh-CN' ? ZH_TRANSLATIONS[english] : english);
+    }
+  });
 }
 
 function applyAppearance(appearance) {
@@ -165,6 +379,7 @@ function applyAppearance(appearance) {
 function applyLanguage(language) {
   currentLanguage = language === 'zh-CN' ? 'zh-CN' : 'en';
   document.documentElement.lang = currentLanguage;
+  document.title = t('Aura - MCP Connector');
   localizeStaticText(currentLanguage);
 
   const languageDisplay = document.getElementById('language-display');
@@ -361,11 +576,65 @@ function getCurrentMode() {
 }
 
 async function restartCurrentServices(mode = getCurrentMode()) {
-  try {
-    await window.api.restartTunnel(mode);
-  } catch (err) {
-    console.error('Failed to restart local MCP services:', err);
-    flashTransientHint('Saved, but service restart failed', 'tunnel-install-hint');
+  const isCurrentlyRunning = await window.api.getServiceState();
+  if (!isCurrentlyRunning) {
+    // If not running, just restart it (which effectively starts it) but show "Connecting..."
+    const text = document.getElementById('status-text');
+    const button = document.getElementById('power-btn');
+    if (text) text.textContent = t('Connecting...');
+    if (button) {
+      button.disabled = true;
+      button.classList.add('is-loading');
+    }
+    try {
+      await window.api.restartTunnel(mode);
+      updateServiceUI(true);
+    } catch (err) {
+      const errMsg = err?.message || String(err);
+      console.error('Failed to restart local MCP services:', err);
+      if (!errMsg.includes('cancelled')) {
+        flashTransientHint(t('Saved, but service start failed'), 'tunnel-install-hint');
+        showConnectionErrorModal(false, errMsg);
+      }
+      updateServiceUI(false);
+    } finally {
+      if (button) {
+        button.disabled = false;
+        button.classList.remove('is-loading');
+      }
+    }
+  } else {
+    // If already running, show restarting UI
+    const text = document.getElementById('status-text');
+    const button = document.getElementById('power-btn');
+    if (text) text.textContent = t('Restarting...');
+    if (button) {
+      button.disabled = true;
+      button.classList.add('is-loading');
+    }
+    try {
+      await window.api.restartTunnel(mode);
+      updateServiceUI(true);
+    } catch (err) {
+      const errMsg = err?.message || String(err);
+      console.error('Failed to restart local MCP services:', err);
+      if (!errMsg.includes('cancelled')) {
+        flashTransientHint(t('Saved, but service restart failed'), 'tunnel-install-hint');
+        showConnectionErrorModal(true, errMsg);
+      }
+      try {
+        const realState = await window.api.getServiceState();
+        updateServiceUI(realState);
+      } catch (fallbackErr) {
+        console.error('Failed to check fallback state:', fallbackErr);
+        updateServiceUI(false);
+      }
+    } finally {
+      if (button) {
+        button.disabled = false;
+        button.classList.remove('is-loading');
+      }
+    }
   }
 }
 
@@ -427,7 +696,7 @@ function renderDefaultCapabilityTools(catalog = [], selected = []) {
   if (!defaultCapabilityTools.length) {
     const empty = document.createElement('div');
     empty.className = 'pi-tools-empty';
-    empty.textContent = 'No default capabilities available.';
+    empty.textContent = t('No default capabilities available.');
     fragment.appendChild(empty);
   }
   list.appendChild(fragment);
@@ -491,7 +760,7 @@ function populatePiToolPluginFilter() {
   });
   const entries = [
     { value: 'all', label: t('All plugins'), count: piCapabilityTools.length },
-    ...plugins.map(plugin => ({ value: plugin, label: plugin, count: counts.get(plugin) }))
+    ...plugins.map(plugin => ({ value: plugin, label: t(plugin), count: counts.get(plugin) }))
   ];
   const selectedValue = entries.some(entry => entry.value === previous) ? previous : 'all';
 
@@ -510,7 +779,9 @@ function populatePiToolPluginFilter() {
     count.style.color = 'var(--color-text-tertiary)';
     count.style.fontSize = '10px';
     count.style.flex = 'none';
-    count.textContent = `${entry.count} tool${entry.count === 1 ? '' : 's'}`;
+    count.textContent = currentLanguage === 'zh-CN'
+      ? `${entry.count} 个工具`
+      : `${entry.count} tool${entry.count === 1 ? '' : 's'}`;
     option.append(label, count);
 
     option.addEventListener('click', event => {
@@ -597,9 +868,16 @@ function updatePiToolsSummary() {
     return;
   }
   const enabled = getSelectedPiToolNames().length;
-  summary.textContent = currentLanguage === 'zh-CN'
-    ? `${enabled} 个已启用 · ${piCapabilityTools.length} 个可用`
-    : `${enabled} enabled · ${piCapabilityTools.length} available`;
+  const availableCount = piCapabilityTools.length;
+  if (availableCount === 0) {
+    summary.textContent = currentLanguage === 'zh-CN'
+      ? `${enabled} 个已启用`
+      : `${enabled} enabled`;
+  } else {
+    summary.textContent = currentLanguage === 'zh-CN'
+      ? `${enabled} 个已启用 · ${availableCount} 个可用`
+      : `${enabled} enabled · ${availableCount} available`;
+  }
   updatePiToolsBulkButtons();
 }
 
@@ -608,6 +886,7 @@ function updateMcpCapabilitiesSaveState() {
   const instructions = document.getElementById('mcp-instructions');
   const defaultToggle = document.getElementById('default-capabilities-toggle');
   const piToggle = document.getElementById('pi-enabled-toggle');
+  const piBinaryInput = document.getElementById('pi-binary-path');
   if (!saveBtn || !instructions || !defaultToggle || !piToggle) return;
   const savedDefaultTools = Array.from(savedDefaultToolNames).sort();
   const currentDefaultTools = getSelectedDefaultToolNames();
@@ -617,6 +896,7 @@ function updateMcpCapabilitiesSaveState() {
     || defaultToggle.checked !== savedDefaultCapabilitiesEnabled
     || JSON.stringify(currentDefaultTools) !== JSON.stringify(savedDefaultTools)
     || piToggle.checked !== savedPiEnabled
+    || (piBinaryInput && piBinaryInput.value.trim() !== (piBinaryInput.dataset.savedValue || ''))
     || JSON.stringify(currentTools) !== JSON.stringify(savedTools);
   saveBtn.classList.toggle('btn-primary', dirty);
 }
@@ -640,7 +920,7 @@ function renderPiCapabilityTools(result) {
   if (!result?.available) {
     const empty = document.createElement('div');
     empty.className = 'pi-tools-empty';
-    empty.textContent = `Pi unavailable: ${result?.error || 'installation not found'}`;
+    empty.textContent = `${t('Pi unavailable')}: ${result?.error || t('installation not found')}`;
     list.appendChild(empty);
     updatePiToolsSummary();
     scheduleUpdateMcpCapabilitiesSaveState();
@@ -651,7 +931,7 @@ function renderPiCapabilityTools(result) {
   if (piCapabilityTools.length === 0) {
     const empty = document.createElement('div');
     empty.className = 'pi-tools-empty';
-    empty.textContent = 'No Pi tools discovered.';
+    empty.textContent = t('No Pi tools discovered.');
     fragment.appendChild(empty);
   }
 
@@ -684,17 +964,17 @@ function renderPiCapabilityTools(result) {
     nameRow.appendChild(name);
     const pluginBadge = document.createElement('span');
     pluginBadge.className = 'pi-tool-plugin-badge';
-    pluginBadge.textContent = toolPlugin;
+    pluginBadge.textContent = t(toolPlugin);
     nameRow.appendChild(pluginBadge);
     if (tool.usesPiDefaultModel) {
       const warning = document.createElement('span');
       warning.className = 'pi-tool-token-warning';
-      warning.textContent = 'May use Pi model tokens';
+      warning.textContent = t('May use Pi model tokens');
       nameRow.appendChild(warning);
     }
     const description = document.createElement('div');
     description.className = 'pi-tool-description';
-    description.textContent = tool.description || 'No description provided.';
+    description.textContent = tool.description || t('No description provided.');
     body.append(nameRow, description);
 
     row.append(checkbox, body);
@@ -705,7 +985,7 @@ function renderPiCapabilityTools(result) {
     const filterEmpty = document.createElement('div');
     filterEmpty.id = 'pi-tools-filter-empty';
     filterEmpty.className = 'pi-tools-empty';
-    filterEmpty.textContent = 'No matching Pi tools.';
+    filterEmpty.textContent = t('No matching Pi tools.');
     filterEmpty.style.display = 'none';
     fragment.appendChild(filterEmpty);
   }
@@ -720,7 +1000,12 @@ async function ensurePiCapabilitiesLoaded() {
   if (piCapabilitiesLoaded) return;
   if (piCapabilitiesLoadPromise) return piCapabilitiesLoadPromise;
   const list = document.getElementById('pi-tools-list');
-  if (list) list.innerHTML = '<div class="pi-tools-empty">Loading Pi tool registry...</div>';
+  if (list) {
+    const loading = document.createElement('div');
+    loading.className = 'pi-tools-empty';
+    loading.textContent = t('Loading Pi tool registry...');
+    list.replaceChildren(loading);
+  }
   piCapabilitiesLoadPromise = window.api.getPiCapabilities()
     .then(result => renderPiCapabilityTools(result))
     .catch(error => renderPiCapabilityTools({ available: false, tools: [], error: error.message }))
@@ -742,7 +1027,15 @@ async function initializeMcpCapabilitySettings(config) {
   const selectVisibleBtn = document.getElementById('pi-tools-select-visible-btn');
   const clearVisibleBtn = document.getElementById('pi-tools-clear-visible-btn');
   const saveBtn = document.getElementById('save-mcp-capabilities-btn');
+  const piBinaryInput = document.getElementById('pi-binary-path');
   if (!instructions || !defaultToggle || !defaultPanel || !piToggle || !panel || !saveBtn) return;
+
+  if (piBinaryInput) {
+    piBinaryInput.placeholder = t('Auto detect (e.g. ~/.nvm/versions/node/v20/bin/pi)');
+    piBinaryInput.value = config.piBinaryPath || '';
+    piBinaryInput.dataset.savedValue = config.piBinaryPath || '';
+    piBinaryInput.addEventListener('input', scheduleUpdateMcpCapabilitiesSaveState);
+  }
 
   mcpInstructionDefaults = {
     basic: typeof config.mcpInstructionDefaults?.basic === 'string' ? config.mcpInstructionDefaults.basic : '',
@@ -770,7 +1063,10 @@ async function initializeMcpCapabilitySettings(config) {
     defaultPanel.style.display = defaultToggle.checked ? 'block' : 'none';
     scheduleUpdateMcpCapabilitiesSaveState();
   });
-  searchInput?.addEventListener('input', () => debouncedFilterPiTools(searchInput.value));
+  if (searchInput) {
+    searchInput.placeholder = t('Search tools...');
+    searchInput.addEventListener('input', () => debouncedFilterPiTools(searchInput.value));
+  }
   if (pluginDisplay && pluginMenu && pluginArrow) {
     const togglePluginMenu = () => {
       const isVisible = pluginMenu.style.display === 'block';
@@ -795,7 +1091,12 @@ async function initializeMcpCapabilitySettings(config) {
       instructions.value = nextDefault;
     }
     panel.style.display = piToggle.checked ? 'block' : 'none';
-    if (piToggle.checked) await ensurePiCapabilitiesLoaded();
+    scheduleUpdateMcpCapabilitiesSaveState();
+    if (piToggle.checked) {
+      await ensurePiCapabilitiesLoaded();
+    } else {
+      updatePiToolsSummary();
+    }
     scheduleUpdateMcpCapabilitiesSaveState();
   });
   saveBtn.addEventListener('click', saveMcpCapabilitySettings);
@@ -806,8 +1107,11 @@ async function initializeMcpCapabilitySettings(config) {
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
+  void checkForAppUpdate();
+
   const logSearch = document.getElementById('log-search-input');
   if (logSearch) {
+    logSearch.placeholder = t('Search logs, tools, messages...');
     logSearch.addEventListener('input', () => filterLogs(logSearch.value));
   }
   // 1. Immediate sync of service state on page load/reload to prevent state desync
@@ -1073,10 +1377,32 @@ async function populateListenAddresses(selectedAddress = '') {
       option.setAttribute('tabindex', '-1');
       option.setAttribute('aria-selected', 'false');
       option.dataset.value = entry.address;
-      option.textContent = `${entry.address} · ${entry.name}`;
+
+      let displayName = entry.name;
+      const match = entry.name.match(/^(.+?)\s*\((.+?)\)$/);
+      if (match) {
+        displayName = t(match[1]) ? `${t(match[1])} (${match[2]})` : entry.name;
+      } else {
+        displayName = t(entry.name) || entry.name;
+      }
+
+      const hostSpan = document.createElement('span');
+      hostSpan.style.overflow = 'hidden';
+      hostSpan.style.textOverflow = 'ellipsis';
+      hostSpan.textContent = entry.address;
+
+      const tagSpan = document.createElement('span');
+      tagSpan.style.color = 'var(--color-text-tertiary)';
+      tagSpan.style.fontSize = '10px';
+      tagSpan.style.flex = 'none';
+      tagSpan.textContent = displayName;
+
+      option.appendChild(hostSpan);
+      option.appendChild(tagSpan);
+
       option.addEventListener('click', event => {
         event.stopPropagation();
-        input.value = option.textContent;
+        input.value = `${entry.address} · ${displayName}`;
         input.dataset.value = entry.address;
         setMenuVisibility(menu, input, arrow, false);
         scheduleUpdateNetworkSaveState();
@@ -1085,9 +1411,17 @@ async function populateListenAddresses(selectedAddress = '') {
     });
     menu.appendChild(fragment);
     const selected = addresses.find(entry => entry.address === selectedAddress);
+    const selectedNameRaw = selected ? selected.name : 'Saved address';
+    let selectedDisplayName = selectedNameRaw;
+    const sMatch = selectedNameRaw.match(/^(.+?)\s*\((.+?)\)$/);
+    if (sMatch) {
+      selectedDisplayName = t(sMatch[1]) ? `${t(sMatch[1])} (${sMatch[2]})` : selectedNameRaw;
+    } else {
+      selectedDisplayName = t(selectedNameRaw) || selectedNameRaw;
+    }
     input.value = selected
-      ? `${selected.address} · ${selected.name}`
-      : `${selectedAddress || '127.0.0.1'} · Saved address`;
+      ? `${selected.address} · ${selectedDisplayName}`
+      : `${selectedAddress || '127.0.0.1'} · ${t('Saved address') || 'Saved address'}`;
     input.dataset.value = selectedAddress || '127.0.0.1';
     input.dataset.savedValue = input.value;
     arrow.style.display = 'flex';
@@ -1149,6 +1483,116 @@ async function loadProviderFields(mode, config = null) {
   await updateTunnelModeFields(mode);
 }
 
+function showConnectionErrorModal(currentServiceRunning, errMsg) {
+  const existing = document.getElementById('connection-error-modal');
+  if (existing) existing.remove();
+
+  const isExecutableMissing = errMsg.toLowerCase().includes('executable not found');
+  const isTimeout = errMsg.toLowerCase().includes('did not become ready within');
+
+  let displayMsg = errMsg;
+  if (isTimeout) {
+    if (errMsg.includes('cloudflare-named')) {
+      displayMsg = t('Cloudflare tunnel failed to start within the timeout. Please check if your cloudflared config (config.yml) is correct and the token/credentials are valid.');
+    } else if (errMsg.includes('cloudflare-quick')) {
+      displayMsg = t('Cloudflare Quick Tunnel failed to start within the timeout. It may be blocked by your network or Cloudflare is currently experiencing delays.');
+    } else if (errMsg.includes('openai')) {
+      displayMsg = t('OpenAI tunnel failed to start within the timeout. Please check your network connection and verify your Tunnel ID/API Key.');
+    } else {
+      displayMsg = t('Tunnel failed to start within the timeout. Please check your network and configuration.');
+    }
+  }
+
+  const modal = document.createElement('div');
+  modal.id = 'connection-error-modal';
+  modal.style.position = 'fixed';
+  modal.style.top = '0';
+  modal.style.left = '0';
+  modal.style.width = '100vw';
+  modal.style.height = '100vh';
+  modal.style.backgroundColor = 'rgba(0, 0, 0, 0.6)';
+  modal.style.backdropFilter = 'blur(2px)';
+  modal.style.webkitBackdropFilter = 'blur(2px)';
+  modal.style.display = 'flex';
+  modal.style.justifyContent = 'center';
+  modal.style.alignItems = 'center';
+  modal.style.zIndex = '9999';
+
+  const box = document.createElement('div');
+  box.style.backgroundColor = 'var(--color-background-elevated)';
+  box.style.border = '1px solid var(--color-border)';
+  box.style.borderRadius = '8px';
+  box.style.padding = '24px';
+  box.style.maxWidth = '400px';
+  box.style.width = '90%';
+  box.style.boxShadow = '0 8px 32px rgba(0, 0, 0, 0.4)';
+
+  const title = document.createElement('h3');
+  title.style.margin = '0 0 12px 0';
+  title.style.color = 'var(--color-text-primary)';
+  title.textContent = isTimeout ? t('Tunnel start timeout') : `${currentServiceRunning ? t('Disconnect') : t('Connect')} ${t('failed')}`;
+
+  const message = document.createElement('p');
+  message.style.margin = '0 0 20px 0';
+  message.style.color = 'var(--color-text-secondary)';
+  message.style.fontSize = '14px';
+  message.style.lineHeight = '1.5';
+  message.textContent = displayMsg;
+
+  const linksContainer = document.createElement('div');
+  if (isExecutableMissing) {
+    linksContainer.style.marginBottom = '20px';
+    linksContainer.style.display = 'flex';
+    linksContainer.style.flexDirection = 'column';
+    linksContainer.style.gap = '10px';
+
+    const p = document.createElement('div');
+    p.style.fontSize = '14px';
+    p.style.color = 'var(--color-text-primary)';
+    p.textContent = t('You may need to download the tunnel binary:');
+    linksContainer.appendChild(p);
+
+    const openaiLink = document.createElement('a');
+    openaiLink.href = '#';
+    openaiLink.textContent = t('OpenAI tunnel-client (Releases)');
+    openaiLink.style.color = 'var(--blue-300)';
+    openaiLink.style.textDecoration = 'none';
+    openaiLink.onclick = (e) => {
+      e.preventDefault();
+      window.api.openExternal('https://github.com/openai/tunnel-client/releases/latest');
+    };
+    linksContainer.appendChild(openaiLink);
+
+    const cfLink = document.createElement('a');
+    cfLink.href = '#';
+    cfLink.textContent = t('Cloudflare cloudflared (Releases)');
+    cfLink.style.color = 'var(--blue-300)';
+    cfLink.style.textDecoration = 'none';
+    cfLink.onclick = (e) => {
+      e.preventDefault();
+      window.api.openExternal('https://github.com/cloudflare/cloudflared/releases/latest');
+    };
+    linksContainer.appendChild(cfLink);
+  }
+
+  const actions = document.createElement('div');
+  actions.style.display = 'flex';
+  actions.style.justifyContent = 'flex-end';
+
+  const closeBtn = document.createElement('button');
+  closeBtn.className = 'btn btn-secondary';
+  closeBtn.textContent = t('Close');
+  closeBtn.onclick = () => modal.remove();
+  actions.appendChild(closeBtn);
+
+  box.appendChild(title);
+  box.appendChild(message);
+  if (isExecutableMissing) box.appendChild(linksContainer);
+  box.appendChild(actions);
+  modal.appendChild(box);
+  document.body.appendChild(modal);
+}
+
 function updateServiceUI(isRunning) {
   currentServiceRunning = !!isRunning;
   const badge = document.getElementById('status-indicator');
@@ -1175,24 +1619,39 @@ function updateServiceUI(isRunning) {
 
 document.getElementById('power-btn').addEventListener('click', async () => {
   const button = document.getElementById('power-btn');
-  if (button) button.disabled = true;
+  const text = document.getElementById('status-text');
+
+  if (button) {
+    button.disabled = true;
+    button.classList.add('is-loading');
+  }
+
   try {
     const isCurrentlyRunning = await window.api.getServiceState();
+    if (text) {
+      text.textContent = isCurrentlyRunning ? t('Stopping...') : t('Connecting...');
+    }
     const newState = await window.api.toggleServiceState(!isCurrentlyRunning);
     updateServiceUI(newState);
   } catch (err) {
     const errMsg = err?.message || String(err);
     console.error('Failed to change Aura service state:', err);
-    flashTransientHint(`${currentServiceRunning ? 'Disconnect' : 'Connect'} failed: ${errMsg}`, 'tunnel-install-hint');
-    window.alert(`${currentServiceRunning ? 'Disconnect' : 'Connect'} failed:\n${errMsg}`);
+    if (!errMsg.includes('cancelled')) {
+      flashTransientHint(`${currentServiceRunning ? t('Disconnect') : t('Connect')} ${t('failed')}: ${errMsg}`, 'tunnel-install-hint');
+      showConnectionErrorModal(currentServiceRunning, errMsg);
+    }
     try {
       const realState = await window.api.getServiceState();
       updateServiceUI(realState);
-    } catch (_) {
+    } catch (fallbackErr) {
+      console.error('Failed to check fallback state:', fallbackErr);
       updateServiceUI(false);
     }
   } finally {
-    if (button) button.disabled = false;
+    if (button) {
+      button.disabled = false;
+      button.classList.remove('is-loading');
+    }
   }
 });
 
@@ -1342,22 +1801,24 @@ function flashSaveFeedback(btn, successText = 'Saved ✓') {
 function flashTransientHint(text, elId) {
   const hintEl = document.getElementById(elId);
   if (!hintEl) return;
-  const previous = hintEl.textContent;
-  hintEl.textContent = text;
+  const originalNodes = Array.from(hintEl.childNodes);
+  hintEl.replaceChildren(document.createTextNode(text));
   setTimeout(() => {
     if (hintEl.textContent === text) {
-      hintEl.textContent = previous;
+      hintEl.replaceChildren(...originalNodes);
     }
   }, 1100);
 }
 
-document.getElementById('tunnel-doc-link').addEventListener('click', (e) => {
-  e.preventDefault();
-  const mode = document.getElementById('tunnel-mode-display').getAttribute('data-value') || 'cloudflare-named';
-  if (mode === 'openai') {
-    window.api.openExternal('https://github.com/openai/tunnel-client');
-  } else {
-    window.api.openExternal('https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/');
+document.addEventListener('click', (e) => {
+  if (e.target && e.target.id === 'tunnel-doc-link') {
+    e.preventDefault();
+    const mode = document.getElementById('tunnel-mode-display').getAttribute('data-value') || 'cloudflare-named';
+    if (mode === 'openai') {
+      window.api.openExternal('https://github.com/openai/tunnel-client/releases/latest');
+    } else {
+      window.api.openExternal('https://github.com/cloudflare/cloudflared/releases/latest');
+    }
   }
 });
 
@@ -1690,7 +2151,7 @@ async function saveNetworkSettings() {
   const rawPort = portInput ? String(portInput.value).trim() : '3000';
   const port = Number(rawPort);
   if (!Number.isInteger(port) || port < 1 || port > 65535) {
-    flashTransientHint('Enter a valid port between 1 and 65535', 'tunnel-install-hint');
+    flashTransientHint(t('Enter a valid port between 1 and 65535'), 'tunnel-install-hint');
     if (portInput) portInput.focus();
     return;
   }
@@ -1736,7 +2197,7 @@ async function saveNetworkSettings() {
     if (networkSaveBtn) flashSaveFeedback(networkSaveBtn);
   } catch (err) {
     console.error('Failed to save network settings:', err);
-    flashTransientHint('Failed to save settings: ' + err.message, 'tunnel-install-hint');
+    flashTransientHint(`${t('Failed to save settings')}: ${err.message}`, 'tunnel-install-hint');
   } finally {
     if (networkSaveBtn) networkSaveBtn.classList.remove('is-loading');
   }
@@ -1750,7 +2211,7 @@ async function saveAccessSettings() {
   const accessSaveBtn = document.getElementById('save-access-btn');
   const input = document.getElementById('admin-pass');
   if (!input || !input.value) {
-    flashTransientHint('Enter a password to save', 'tunnel-install-hint');
+    flashTransientHint(t('Enter a password to save'), 'tunnel-install-hint');
     if (input) input.focus();
     return;
   }
@@ -1775,6 +2236,7 @@ async function saveMcpCapabilitySettings() {
   const instructions = document.getElementById('mcp-instructions');
   const defaultToggle = document.getElementById('default-capabilities-toggle');
   const piToggle = document.getElementById('pi-enabled-toggle');
+  const piBinaryInput = document.getElementById('pi-binary-path');
   if (!saveBtn || !instructions || !defaultToggle || !piToggle) return;
 
   if (piToggle.checked && !piCapabilitiesLoaded) {
@@ -1789,6 +2251,7 @@ async function saveMcpCapabilitySettings() {
     || defaultToggle.checked !== savedDefaultCapabilitiesEnabled
     || JSON.stringify(selectedDefaultTools) !== JSON.stringify(Array.from(savedDefaultToolNames).sort())
     || piToggle.checked !== savedPiEnabled
+    || (piBinaryInput && piBinaryInput.value.trim() !== (piBinaryInput.dataset.savedValue || ''))
     || JSON.stringify(selectedTools) !== JSON.stringify(Array.from(savedPiToolNames).sort());
 
   saveBtn.classList.add('is-loading');
@@ -1798,6 +2261,7 @@ async function saveMcpCapabilitySettings() {
       defaultCapabilitiesEnabled: defaultToggle.checked,
       defaultTools: selectedDefaultTools,
       piEnabled: piToggle.checked,
+      piBinaryPath: piBinaryInput ? piBinaryInput.value.trim() : '',
       piTools: selectedTools,
       piAllowModelTools: allowPiModelTools
     });
@@ -1806,21 +2270,24 @@ async function saveMcpCapabilitySettings() {
     savedDefaultCapabilitiesEnabled = defaultToggle.checked;
     savedDefaultToolNames = new Set(selectedDefaultTools);
     savedPiEnabled = piToggle.checked;
+    if (piBinaryInput) {
+      piBinaryInput.dataset.savedValue = piBinaryInput.value.trim();
+    }
     savedPiToolNames = new Set(selectedTools);
     updateMcpCapabilitiesSaveState();
     flashSaveFeedback(saveBtn);
 
-    const isRunning = await window.api.getServiceState();
-    if (isRunning) await restartCurrentServices();
-
     if (mcpContractChanged) {
       window.alert(currentLanguage === 'zh-CN'
-        ? 'MCP 指令或能力已更新。\n\n请前往 ChatGPT 插件页面点击“刷新”，或重新连接 Aura，以加载最新配置。'
-        : 'MCP instructions or capabilities were updated.\n\nOpen the ChatGPT plugin page and click “Refresh”, or reconnect Aura to load the latest configuration.');
+        ? '保存成功。MCP 指令或工具能力已更新。\n\n请前往 ChatGPT 插件页面点击“刷新”，或重新连接 Aura，以加载最新的工具 Schema。'
+        : 'Saved successfully. MCP instructions or tool capabilities were updated.\n\nOpen the ChatGPT plugin page and click “Refresh”, or reconnect Aura to load the latest tool schemas.');
     }
+
+    const isRunning = await window.api.getServiceState();
+    if (isRunning) await restartCurrentServices();
   } catch (err) {
     console.error('Failed to save MCP/Pi settings:', err);
-    flashTransientHint('Failed to save MCP/Pi settings: ' + err.message, 'tunnel-install-hint');
+    flashTransientHint(`${t('Failed to save MCP/Pi settings')}: ${err.message}`, 'tunnel-install-hint');
   } finally {
     saveBtn.classList.remove('is-loading');
   }
@@ -1953,13 +2420,13 @@ function createGuideRow(label, badgeText) {
   row.className = 'guide-row';
 
   const labelSpan = document.createElement('span');
-  labelSpan.textContent = label;
+  labelSpan.textContent = t(label);
 
   const badge = document.createElement('span');
   badge.className = 'copyable-badge';
-  badge.title = 'Double click to copy';
+  badge.title = t('Double click to copy');
   badge.setAttribute('data-copy', badgeText);
-  badge.textContent = badgeText;
+  badge.textContent = t(badgeText);
 
   row.appendChild(labelSpan);
   row.appendChild(badge);
@@ -1983,9 +2450,9 @@ function renderConnectionGuide(mode, url) {
 
   if (mode === 'openai') {
     const currentTunnelId = document.getElementById('openai-tunnel-id')?.value?.trim() || '';
-    headerTitle.textContent = 'ChatGPT Connector Setup';
+    headerTitle.textContent = t('ChatGPT Connector Setup');
     tagSpan.style.color = 'var(--blue-300)';
-    tagSpan.textContent = 'Private Channel';
+    tagSpan.textContent = t('Private Channel');
     header.appendChild(headerTitle);
     header.appendChild(tagSpan);
     box.appendChild(header);
@@ -2000,12 +2467,12 @@ function renderConnectionGuide(mode, url) {
     note.style.color = 'var(--color-text-tertiary)';
     note.style.display = 'block';
     note.style.marginTop = '8px';
-    note.textContent = 'In ChatGPT Custom App setup, select "Tunnel" and provide this Tunnel ID. No public URL or OAuth endpoint required.';
+    note.textContent = t('In ChatGPT Custom App setup, select "Tunnel" and provide this Tunnel ID. No public URL or OAuth endpoint required.');
     box.appendChild(note);
   } else {
     const currentMcpPath = window.currentMcpPath || '/mcp';
     const fullMcpUrl = formatServerMcpUrl(url, currentMcpPath) || `https://mcp.yourdomain.com${currentMcpPath}`;
-    headerTitle.textContent = 'ChatGPT / Claude Setup';
+    headerTitle.textContent = t('ChatGPT / Claude Setup');
     tagSpan.style.color = 'var(--green-300)';
     tagSpan.textContent = 'OAuth 2.1 + CIMD';
     header.appendChild(headerTitle);
@@ -2020,7 +2487,7 @@ function renderConnectionGuide(mode, url) {
     note.style.color = 'var(--color-text-tertiary)';
     note.style.display = 'block';
     note.style.marginTop = '8px';
-    note.textContent = 'Paste the Server URL into ChatGPT. Double-click any parameter to copy.';
+    note.textContent = t('Paste the Server URL into ChatGPT. Double-click any parameter to copy.');
     box.appendChild(note);
   }
 
@@ -2036,7 +2503,7 @@ function renderConnectionGuide(mode, url) {
         const copiedSpan = document.createElement('span');
         copiedSpan.style.color = 'var(--green-300)';
         copiedSpan.style.fontSize = '11px';
-        copiedSpan.textContent = 'Copied ✓';
+        copiedSpan.textContent = t('Copied ✓');
         el.appendChild(copiedSpan);
         setTimeout(() => {
           el.replaceChildren(...originalNodes);
@@ -2074,7 +2541,7 @@ async function reloadCfHostnames() {
       const hintSpan = document.createElement('span');
       hintSpan.style.color = 'var(--color-text-tertiary)';
       hintSpan.style.fontSize = '10px';
-      hintSpan.textContent = 'ingress rule';
+      hintSpan.textContent = t('ingress rule');
 
       item.appendChild(hostSpan);
       item.appendChild(hintSpan);
@@ -2122,7 +2589,7 @@ async function reloadCfConfigFiles() {
       tagSpan.style.color = 'var(--color-text-tertiary)';
       tagSpan.style.fontSize = '10px';
       tagSpan.style.flex = 'none';
-      tagSpan.textContent = 'detected';
+      tagSpan.textContent = t('Detected');
 
       item.appendChild(pathSpan);
       item.appendChild(tagSpan);
@@ -2245,7 +2712,7 @@ async function reloadAcmeCerts() {
         tagSpan.style.color = 'var(--color-text-tertiary)';
         tagSpan.style.fontSize = '10px';
         tagSpan.style.flex = 'none';
-        tagSpan.textContent = 'detected';
+        tagSpan.textContent = t('Detected');
 
         item.appendChild(domainSpan);
         item.appendChild(tagSpan);
@@ -2269,12 +2736,12 @@ async function reloadAcmeCerts() {
       certMenu.appendChild(fragment);
       certArrow.style.display = 'flex';
       if (!certInput.value) {
-        certInput.placeholder = `Detected: ${certs[0].domain}`;
+        certInput.placeholder = `${t('Detected')}: ${certs[0].domain}`;
       }
     } else {
       certArrow.style.display = 'none';
       if (!certInput.value) {
-        certInput.placeholder = 'e.g. ~/.acme.sh/domain/fullchain.cer';
+        certInput.placeholder = t('e.g. ~/.acme.sh/domain/fullchain.cer');
       }
     }
   } catch (err) {
@@ -2285,7 +2752,6 @@ async function reloadAcmeCerts() {
 async function updateTunnelModeFields(mode) {
   const urlInput = document.getElementById('mcp-url');
   const hintEl = document.getElementById('tunnel-install-hint');
-  const linkEl = document.getElementById('tunnel-doc-link');
   const cfArrow = document.getElementById('cf-hostname-arrow');
   const cfConfigRow = document.getElementById('cf-config-row');
   const mcpUrlRow = document.getElementById('mcp-url-row');
@@ -2313,7 +2779,15 @@ async function updateTunnelModeFields(mode) {
 
     cfArrow.style.display = 'none';
     hintEl.style.display = 'block';
-    linkEl.textContent = 'openai/tunnel-client';
+    hintEl.replaceChildren();
+    hintEl.appendChild(document.createTextNode(t('Requires OpenAI tunnel-client setup.') + ' '));
+    const link = document.createElement('a');
+    link.id = 'tunnel-doc-link';
+    link.href = '#';
+    link.style.color = 'var(--blue-300)';
+    link.style.textDecoration = 'none';
+    link.textContent = 'openai/tunnel-client';
+    hintEl.appendChild(link);
     await reloadTunnelBinaries(mode);
   } else if (mode === 'cloudflare-quick') {
     if (cfConfigRow) cfConfigRow.style.display = 'none';
@@ -2330,7 +2804,15 @@ async function updateTunnelModeFields(mode) {
     urlInput.style.backgroundColor = 'var(--color-background-control)';
     cfArrow.style.display = 'none';
     hintEl.style.display = 'block';
-    linkEl.textContent = 'cloudflared';
+    hintEl.replaceChildren();
+    hintEl.appendChild(document.createTextNode(t('Requires Cloudflare config in Named/Quick tunnel mode.') + ' '));
+    const link = document.createElement('a');
+    link.id = 'tunnel-doc-link';
+    link.href = '#';
+    link.style.color = 'var(--blue-300)';
+    link.style.textDecoration = 'none';
+    link.textContent = 'cloudflared';
+    hintEl.appendChild(link);
     await reloadTunnelBinaries(mode);
   } else if (mode === 'cloudflare-named') {
     if (cfConfigRow) cfConfigRow.style.display = 'grid';
@@ -2346,7 +2828,15 @@ async function updateTunnelModeFields(mode) {
     urlInput.readOnly = false;
     urlInput.style.backgroundColor = 'var(--color-background-control)';
     hintEl.style.display = 'block';
-    linkEl.textContent = 'cloudflared';
+    hintEl.replaceChildren();
+    hintEl.appendChild(document.createTextNode(t('Requires Cloudflare config in Named/Quick tunnel mode.') + ' '));
+    const link = document.createElement('a');
+    link.id = 'tunnel-doc-link';
+    link.href = '#';
+    link.style.color = 'var(--blue-300)';
+    link.style.textDecoration = 'none';
+    link.textContent = 'cloudflared';
+    hintEl.appendChild(link);
     await Promise.all([reloadCfConfigFiles(), reloadCfHostnames(), reloadTunnelBinaries(mode)]);
   } else {
     if (cfConfigRow) cfConfigRow.style.display = 'none';
@@ -2363,7 +2853,8 @@ async function updateTunnelModeFields(mode) {
     urlInput.style.backgroundColor = 'var(--color-background-control)';
     cfArrow.style.display = 'none';
     hintEl.style.display = 'block';
-    hintEl.innerHTML = 'Optional SSL: Auto-scans <code>~/.acme.sh</code> for certificates or select local cert/key for HTTPS proxy.';
+    hintEl.replaceChildren();
+    hintEl.appendChild(document.createTextNode(t('Optional SSL: Auto-scans ~/.acme.sh for certificates or select local cert/key for HTTPS proxy.')));
     await reloadAcmeCerts();
   }
   renderConnectionGuide(mode, urlInput.value);
@@ -2397,20 +2888,20 @@ function attachCopyButton(headerEl, textToCopy) {
   const btn = document.createElement('button');
   btn.type = 'button';
   btn.className = 'detail-copy-btn';
-  btn.textContent = 'Copy';
+  btn.textContent = t('Copy');
   btn.addEventListener('click', async (e) => {
     e.stopPropagation();
     try {
       await navigator.clipboard.writeText(textToCopy);
-      btn.textContent = 'Copied ✓';
+      btn.textContent = t('Copied ✓');
       btn.classList.add('is-copied');
       setTimeout(() => {
-        btn.textContent = 'Copy';
+        btn.textContent = t('Copy');
         btn.classList.remove('is-copied');
       }, 1200);
     } catch {
-      btn.textContent = 'Failed';
-      setTimeout(() => { btn.textContent = 'Copy'; }, 1200);
+      btn.textContent = t('Failed');
+      setTimeout(() => { btn.textContent = t('Copy'); }, 1200);
     }
   });
   headerEl.appendChild(btn);
@@ -2526,7 +3017,7 @@ function createMcpLogElement(entry) {
 
     const httpTitle = document.createElement('span');
     httpTitle.className = 'detail-section-title';
-    httpTitle.textContent = 'Inbound HTTP Context';
+    httpTitle.textContent = t('Inbound HTTP Context');
     httpHeader.appendChild(httpTitle);
 
     const httpPayload = {
@@ -2539,7 +3030,8 @@ function createMcpLogElement(entry) {
     };
     if (httpCtx.userAgent) httpPayload.userAgent = httpCtx.userAgent;
     if (httpCtx.query) httpPayload.query = httpCtx.query;
-    if (httpCtx.headers) httpPayload.headers = httpCtx.headers;
+    if (httpCtx.headers) httpPayload.requestHeaders = httpCtx.headers;
+    if (httpCtx.responseHeaders) httpPayload.responseHeaders = httpCtx.responseHeaders;
 
     const httpText = JSON.stringify(httpPayload, null, 2);
     attachCopyButton(httpHeader, httpText);
@@ -2560,7 +3052,7 @@ function createMcpLogElement(entry) {
 
     const argsTitle = document.createElement('span');
     argsTitle.className = 'detail-section-title';
-    argsTitle.textContent = 'Tool Arguments';
+    argsTitle.textContent = t('Tool Arguments');
     argsHeader.appendChild(argsTitle);
 
     const paramsText = JSON.stringify(entry.params || {}, null, 2);
@@ -2581,10 +3073,10 @@ function createMcpLogElement(entry) {
     const resTitle = document.createElement('span');
     resTitle.className = 'detail-section-title';
     resTitle.style.color = isSuccess ? 'var(--color-text-tertiary)' : 'var(--red-300)';
-    resTitle.textContent = isSuccess ? 'Response Output' : 'Error Detail';
+    resTitle.textContent = t(isSuccess ? 'Response Output' : 'Error Detail');
     resHeader.appendChild(resTitle);
 
-    const outText = entry.error || entry.output || '(No response output)';
+    const outText = entry.error || entry.output || t('(No response output)');
     attachCopyButton(resHeader, outText);
     resSection.appendChild(resHeader);
 
@@ -2671,7 +3163,7 @@ function createTunnelLogElement(entry) {
   const panel = document.createElement('div');
   panel.className = 'activity-details-panel';
 
-  const detailText = entry.detail ? JSON.stringify(entry.detail, null, 2) : (entry.message || '(No extra details)');
+  const detailText = entry.detail ? JSON.stringify(entry.detail, null, 2) : (entry.message || t('(No extra details)'));
 
   const detailSection = document.createElement('div');
   const detailHeader = document.createElement('div');
@@ -2679,7 +3171,7 @@ function createTunnelLogElement(entry) {
 
   const detailTitle = document.createElement('span');
   detailTitle.className = 'detail-section-title';
-  detailTitle.textContent = 'Event Details';
+  detailTitle.textContent = t('Event Details');
   detailHeader.appendChild(detailTitle);
 
   attachCopyButton(detailHeader, detailText);
@@ -2768,7 +3260,7 @@ function createRuntimeLogElement(entry) {
   const panel = document.createElement('div');
   panel.className = 'activity-details-panel';
 
-  const detailText = entry.detail ? JSON.stringify(entry.detail, null, 2) : (entry.message || '(No extra details)');
+  const detailText = entry.detail ? JSON.stringify(entry.detail, null, 2) : (entry.message || t('(No extra details)'));
 
   const detailSection = document.createElement('div');
   const detailHeader = document.createElement('div');
@@ -2776,7 +3268,7 @@ function createRuntimeLogElement(entry) {
 
   const detailTitle = document.createElement('span');
   detailTitle.className = 'detail-section-title';
-  detailTitle.textContent = 'Runtime Details';
+  detailTitle.textContent = t('Runtime Details');
   detailHeader.appendChild(detailTitle);
 
   attachCopyButton(detailHeader, detailText);
@@ -2819,7 +3311,7 @@ function renderRecentMcpLogs() {
     const empty = document.createElement('div');
     empty.className = 'activity-empty';
     empty.id = 'activity-empty-state';
-    empty.textContent = 'Waiting for AI assistant MCP requests...';
+    empty.textContent = t('Waiting for AI assistant MCP requests...');
     mcpContainer.appendChild(empty);
     return;
   }
@@ -2839,7 +3331,7 @@ function renderRecentTunnelLogs() {
     const empty = document.createElement('div');
     empty.className = 'activity-empty';
     empty.id = 'tunnel-empty-state';
-    empty.textContent = 'Waiting for tunnel events...';
+    empty.textContent = t('Waiting for tunnel events...');
     container.appendChild(empty);
     return;
   }
@@ -2859,7 +3351,7 @@ function renderRecentRuntimeLogs() {
     const empty = document.createElement('div');
     empty.className = 'activity-empty';
     empty.id = 'runtime-empty-state';
-    empty.textContent = 'Waiting for runtime events...';
+    empty.textContent = t('Waiting for runtime events...');
     container.appendChild(empty);
     return;
   }
@@ -2920,7 +3412,7 @@ async function exportSafeLog() {
     await navigator.clipboard.writeText(JSON.stringify(exportPayload, null, 2));
     if (exportBtn) {
       const originalText = exportBtn.textContent;
-      exportBtn.textContent = 'Copied ✓';
+      exportBtn.textContent = t('Copied ✓');
       exportBtn.classList.add('btn-success');
       setTimeout(() => {
         exportBtn.textContent = originalText;
@@ -2931,7 +3423,7 @@ async function exportSafeLog() {
     console.error('Failed to export log to clipboard:', err);
     if (exportBtn) {
       const originalText = exportBtn.textContent;
-      exportBtn.textContent = 'Copy Failed';
+      exportBtn.textContent = t('Copy Failed');
       setTimeout(() => {
         exportBtn.textContent = originalText;
       }, 1400);
@@ -2954,7 +3446,7 @@ async function clearAllLogs() {
     const empty = document.createElement('div');
     empty.className = 'activity-empty';
     empty.id = 'activity-empty-state';
-    empty.textContent = 'Logs cleared. Waiting for new activity...';
+    empty.textContent = t('Logs cleared. Waiting for new activity...');
     tableContainer.appendChild(empty);
   }
 
@@ -2964,7 +3456,7 @@ async function clearAllLogs() {
     const empty = document.createElement('div');
     empty.className = 'activity-empty';
     empty.id = 'tunnel-empty-state';
-    empty.textContent = 'Tunnel logs cleared.';
+    empty.textContent = t('Tunnel logs cleared.');
     tunnelContainer.appendChild(empty);
   }
 
@@ -2974,7 +3466,7 @@ async function clearAllLogs() {
     const empty = document.createElement('div');
     empty.className = 'activity-empty';
     empty.id = 'runtime-empty-state';
-    empty.textContent = 'App runtime logs cleared.';
+    empty.textContent = t('App runtime logs cleared.');
     runtimeContainer.appendChild(empty);
   }
 
@@ -2988,7 +3480,7 @@ async function clearAllLogs() {
 
   if (clearBtn) {
     const originalText = clearBtn.textContent;
-    clearBtn.textContent = 'Cleared ✓';
+    clearBtn.textContent = t('Cleared ✓');
     clearBtn.classList.add('btn-success');
     setTimeout(() => {
       clearBtn.textContent = originalText;

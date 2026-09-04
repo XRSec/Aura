@@ -116,8 +116,10 @@
 
     /* Custom Titlebar */
     .app-titlebar {
-      position: sticky;
+      position: fixed;
       top: 0;
+      left: 0;
+      width: 100%;
       z-index: 100;
       display: flex;
       height: 48px;
@@ -135,6 +137,8 @@
       font-size: 13px;
       font-weight: 500;
       color: var(--color-text-primary);
+      -webkit-user-select: none;
+      user-select: none;
     }
     .status-badge {
       display: inline-flex;
@@ -176,8 +180,7 @@
     .container {
       width: 100%;
       height: calc(100dvh - 48px);
-      max-width: none;
-      margin: 0;
+      margin: 48px 0 0 0;
       padding: 0;
       overflow: visible;
     }
@@ -217,6 +220,37 @@
       color: var(--color-text-secondary);
       font-size: 12px;
       line-height: 1.5;
+    }
+    .update-notice {
+      display: none;
+      align-items: center;
+      gap: 12px;
+      margin: 0 0 18px;
+      padding: 11px 12px;
+      border: 1px solid rgb(51 156 255 / 24%);
+      border-radius: var(--radius-md);
+      background: rgb(51 156 255 / 7%);
+    }
+    .update-notice-copy {
+      display: flex;
+      min-width: 0;
+      flex: 1;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .update-notice-copy strong {
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .update-notice-copy span {
+      color: var(--color-text-secondary);
+      font-size: 11px;
+      line-height: 1.4;
+    }
+    .update-notice code {
+      color: var(--color-text-primary);
+      font-family: var(--font-mono);
+      font-size: 10.5px;
     }
     .section-heading {
       display: flex;
@@ -346,6 +380,10 @@
       background: transparent;
       color: var(--color-text-tertiary);
     }
+    .input-combobox input:read-only {
+      background: var(--color-background-control);
+      color: var(--color-text-primary);
+    }
 
     .setting-row.is-stacked {
       grid-template-columns: 1fr;
@@ -414,6 +452,59 @@
       background: rgba(0, 0, 0, 0.08);
       overflow: visible;
     }
+    .pi-binary-row {
+      display: grid;
+      grid-template-columns: minmax(180px, 0.8fr) minmax(0, 1.2fr);
+      align-items: center;
+      gap: 16px;
+      padding: 12px;
+      border-bottom: 1px solid var(--color-border);
+      border-radius: var(--radius-md) var(--radius-md) 0 0;
+      background: var(--color-background-surface);
+    }
+    .pi-binary-copy {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+    }
+    .pi-binary-icon {
+      display: inline-flex;
+      width: 30px;
+      height: 30px;
+      flex: 0 0 auto;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid var(--color-border);
+      border-radius: 8px;
+      background: var(--color-background-control);
+      color: var(--blue-300);
+    }
+    .pi-binary-icon svg {
+      width: 16px;
+      height: 16px;
+      fill: currentColor;
+    }
+    .pi-binary-text {
+      min-width: 0;
+    }
+    .pi-binary-text .field-hint {
+      margin-top: 3px;
+      font-size: 10px;
+      line-height: 1.35;
+    }
+    .pi-binary-field {
+      position: relative;
+      min-width: 0;
+    }
+    #pi-binary-path {
+      height: 34px;
+      padding: 0 12px;
+      border-radius: 8px;
+      background: var(--color-background-control);
+      font-size: 11px;
+      letter-spacing: -0.01em;
+    }
     .pi-tools-toolbar {
       display: flex;
       align-items: center;
@@ -472,10 +563,14 @@
       height: 22px;
     }
     .pi-tool-list {
-      max-height: 360px;
+      max-height: 500px;
+      min-height: 120px;
       overflow-y: auto;
       contain: content;
       will-change: scroll-position;
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-sm);
+      background: var(--color-background-surface);
     }
     .pi-tool-item {
       display: grid;
@@ -1365,12 +1460,12 @@
 </head>
 <body>
   <!-- Drag Bar / Header -->
-  <div class="app-titlebar">
-    <div class="titlebar-brand">
-      <strong>Aura</strong>
-      <span style="color: var(--color-text-tertiary); font-size: 11px;">MCP Server</span>
+  <div class="app-titlebar" data-tauri-drag-region id="titlebar">
+    <div class="titlebar-brand" data-tauri-drag-region>
+      <strong data-tauri-drag-region>Aura</strong>
+      <span data-tauri-drag-region style="color: var(--color-text-tertiary); font-size: 11px;">MCP Server</span>
     </div>
-    <div style="display: flex; align-items: center; gap: 12px; -webkit-app-region: no-drag;">
+    <div style="display: flex; align-items: center; gap: 12px; position: relative; z-index: 10; -webkit-app-region: no-drag;">
       <!-- Navigation Tabs: Settings & Logs -->
       <div class="titlebar-nav" role="tablist">
         <button type="button" class="titlebar-tab-btn is-active" id="tab-btn-settings" role="tab" aria-selected="true" aria-controls="surface-settings" onclick="switchMainTab('settings')">
@@ -1399,6 +1494,14 @@
         <p>Configure local tools, network tunnels, and authorization credentials for AI assistants.</p>
       </div>
 
+      <div class="update-notice" id="update-notice" role="status" aria-live="polite">
+        <div class="update-notice-copy">
+          <strong>Update available</strong>
+          <span><span>Current version:</span> <code id="update-current-version"></code> · <span>Latest release:</span> <code id="update-latest-version"></code></span>
+        </div>
+        <button type="button" class="btn btn-secondary" id="update-release-btn">View release</button>
+      </div>
+
       <!-- Section 1: General -->
       <div class="section-heading">General</div>
       <div class="settings-card">
@@ -1421,7 +1524,7 @@
         <div class="setting-row">
           <div class="setting-label">Language</div>
           <div class="input-combobox compact-combobox" id="language-combobox-wrapper">
-            <input type="text" id="language-display" value="English" readonly spellcheck="false" style="cursor: pointer;" role="combobox" aria-haspopup="listbox" aria-controls="language-dropdown-menu" aria-expanded="false" aria-label="Language">
+            <input type="text" id="language-display" value="" readonly spellcheck="false" style="cursor: pointer;" role="combobox" aria-haspopup="listbox" aria-controls="language-dropdown-menu" aria-expanded="false" aria-label="Language">
             <button type="button" class="combobox-arrow-btn" id="language-arrow" title="Select Language" aria-label="Select language" aria-controls="language-dropdown-menu" aria-expanded="false">
               <svg viewBox="0 0 24 24"><path d="M7 10l5 5 5-5z"/></svg>
             </button>
@@ -1435,7 +1538,7 @@
         <div class="setting-row">
           <div class="setting-label">Appearance</div>
           <div class="input-combobox compact-combobox" id="appearance-combobox-wrapper">
-            <input type="text" id="appearance-display" value="Dark" readonly spellcheck="false" style="cursor: pointer;" role="combobox" aria-haspopup="listbox" aria-controls="appearance-dropdown-menu" aria-expanded="false" aria-label="Appearance">
+            <input type="text" id="appearance-display" value="" readonly spellcheck="false" style="cursor: pointer;" role="combobox" aria-haspopup="listbox" aria-controls="appearance-dropdown-menu" aria-expanded="false" aria-label="Appearance">
             <button type="button" class="combobox-arrow-btn" id="appearance-arrow" title="Select Appearance" aria-label="Select appearance" aria-controls="appearance-dropdown-menu" aria-expanded="false">
               <svg viewBox="0 0 24 24"><path d="M7 10l5 5 5-5z"/></svg>
             </button>
@@ -1453,7 +1556,7 @@
         <div class="setting-row">
           <div class="setting-label">Tunnel Mode</div>
           <div class="input-combobox" id="tunnel-mode-combobox-wrapper">
-            <input type="text" id="tunnel-mode-display" value="Cloudflare Named Tunnel" readonly spellcheck="false" style="cursor: pointer;" role="combobox" aria-haspopup="listbox" aria-controls="tunnel-mode-dropdown-menu" aria-expanded="false" aria-label="Tunnel mode">
+            <input type="text" id="tunnel-mode-display" value="" readonly spellcheck="false" style="cursor: pointer;" role="combobox" aria-haspopup="listbox" aria-controls="tunnel-mode-dropdown-menu" aria-expanded="false" aria-label="Tunnel mode">
             <button type="button" class="combobox-arrow-btn" id="tunnel-mode-arrow" title="Select Tunnel Mode" aria-label="Select tunnel mode" aria-controls="tunnel-mode-dropdown-menu" aria-expanded="false">
               <svg viewBox="0 0 24 24"><path d="M7 10l5 5 5-5z"/></svg>
             </button>
@@ -1469,7 +1572,7 @@
         <div class="setting-row">
           <div class="setting-label">MCP Listen Address</div>
           <div class="input-combobox" id="listen-address-combobox-wrapper">
-            <input type="text" id="listen-host" value="127.0.0.1 · Loopback only" readonly spellcheck="false" style="cursor: pointer;" role="combobox" aria-haspopup="listbox" aria-controls="listen-address-dropdown-menu" aria-expanded="false" aria-label="MCP listen address">
+            <input type="text" id="listen-host" value="" readonly spellcheck="false" style="cursor: pointer;" role="combobox" aria-haspopup="listbox" aria-controls="listen-address-dropdown-menu" aria-expanded="false" aria-label="MCP listen address">
             <button type="button" class="combobox-arrow-btn" id="listen-address-arrow" title="Select MCP listen address" aria-label="Select MCP listen address" aria-controls="listen-address-dropdown-menu" aria-expanded="false">
               <svg viewBox="0 0 24 24"><path d="M7 10l5 5 5-5z"/></svg>
             </button>
@@ -1593,7 +1696,7 @@
             <strong style="font-size: 12px; color: var(--color-text-primary);">OpenAI Secure Ingress Managed</strong>
           </div>
           <div style="color: var(--color-text-secondary); font-size: 11px; line-height: 1.5;">
-            Traffic is securely routed through the outbound tunnel using your Tunnel ID and API Key. No OAuth 2.1 Passcode / Access Tokens required.
+            Traffic is securely routed outbound using the configured Tunnel ID and API Key. OAuth 2.1 passcode authorization and Access Token management are not required in this mode.
           </div>
         </div>
 
@@ -1635,7 +1738,7 @@
               <span id="default-tools-summary">Loading default tools...</span>
               <span>Aura</span>
             </div>
-            <div class="pi-tool-list" id="default-tools-list" style="max-height: 250px;">
+            <div class="pi-tool-list" id="default-tools-list" style="max-height: 160px;">
               <div class="pi-tools-empty">Loading default Aura capabilities...</div>
             </div>
           </div>
@@ -1651,6 +1754,20 @@
           </div>
 
           <div class="pi-tools-panel" id="pi-tools-panel" style="display: none;">
+            <div class="pi-binary-row">
+              <div class="pi-binary-copy">
+                <span class="pi-binary-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24"><path d="M4 5h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2zm1.4 4.1 2.5 2.5-2.5 2.5 1.2 1.2 3.7-3.7-3.7-3.7-1.2 1.2zM11 15h5v-1.7h-5V15z"/></svg>
+                </span>
+                <div class="pi-binary-text">
+                  <div class="setting-label">Pi Binary Path</div>
+                  <div class="field-hint">Leave empty to let Aura locate Pi automatically.</div>
+                </div>
+              </div>
+              <div class="pi-binary-field">
+                <input type="text" id="pi-binary-path" placeholder="Auto detect (e.g. ~/.nvm/versions/node/v20/bin/pi)" spellcheck="false" aria-label="Pi binary file path">
+              </div>
+            </div>
             <div class="pi-tools-toolbar">
               <span id="pi-tools-summary">Loading Pi tools...</span>
               <div class="pi-tools-toolbar-actions">
@@ -1692,7 +1809,7 @@
         <div class="setting-row">
           <div class="setting-label">Shell Policy</div>
           <div class="input-combobox compact-combobox" id="shell-policy-combobox-wrapper">
-            <input type="text" id="shell-policy-display" value="Unrestricted" readonly spellcheck="false" style="cursor: pointer;" role="combobox" aria-haspopup="listbox" aria-controls="shell-policy-dropdown-menu" aria-expanded="false" aria-label="Shell policy">
+            <input type="text" id="shell-policy-display" value="" readonly spellcheck="false" style="cursor: pointer;" role="combobox" aria-haspopup="listbox" aria-controls="shell-policy-dropdown-menu" aria-expanded="false" aria-label="Shell policy">
             <button type="button" class="combobox-arrow-btn" id="shell-policy-arrow" title="Select Shell Policy" aria-label="Select shell policy" aria-controls="shell-policy-dropdown-menu" aria-expanded="false">
               <svg viewBox="0 0 24 24"><path d="M7 10l5 5 5-5z"/></svg>
             </button>

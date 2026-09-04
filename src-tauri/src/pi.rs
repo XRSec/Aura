@@ -229,17 +229,52 @@ async fn inspect_node(path: &Path) -> Option<String> {
     node_compatible(&version).then_some(version)
 }
 
-async fn locate_pi() -> Result<PiLocation, String> {
-    let mut candidates = package_candidates();
-    if let Some(npm_root) = global_npm_root().await {
-        for name in PI_PACKAGE_NAMES {
-            candidates.push(npm_root.join(name));
+async fn locate_pi(cfg: &Value) -> Result<PiLocation, String> {
+    let configured_path = cfg
+        .get("piBinaryPath")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|path| !path.is_empty());
+    let mut candidates = Vec::new();
+
+    if let Some(path_str) = configured_path {
+        let expanded = expand_home(path_str);
+        let canon = fs::canonicalize(&expanded).map_err(|error| {
+            format!("Configured Pi Binary Path '{path_str}' is unavailable: {error}")
+        })?;
+        let mut current = Some(canon.as_path());
+        while let Some(path) = current {
+            let directory = if path.is_dir() {
+                path
+            } else {
+                path.parent().unwrap_or(path)
+            };
+            if directory.join("package.json").is_file() {
+                if let Some(manifest) = package_manifest(directory) {
+                    let name = manifest
+                        .get("name")
+                        .and_then(Value::as_str)
+                        .unwrap_or_default();
+                    if PI_PACKAGE_NAMES.contains(&name) {
+                        candidates.push(directory.to_path_buf());
+                        break;
+                    }
+                }
+            }
+            current = directory.parent();
         }
-        candidates.push(
-            npm_root
-                .join("@agegr/pi-web/node_modules")
-                .join(PI_PACKAGE_NAMES[0]),
-        );
+    } else {
+        candidates.extend(package_candidates());
+        if let Some(npm_root) = global_npm_root().await {
+            for name in PI_PACKAGE_NAMES {
+                candidates.push(npm_root.join(name));
+            }
+            candidates.push(
+                npm_root
+                    .join("@agegr/pi-web/node_modules")
+                    .join(PI_PACKAGE_NAMES[0]),
+            );
+        }
     }
 
     let mut seen = HashSet::new();
@@ -281,7 +316,13 @@ async fn locate_pi() -> Result<PiLocation, String> {
             }
         }
     }
-    Err("Pi Coding Agent or a compatible Node >=22.19 runtime was not found.".into())
+    if let Some(path) = configured_path {
+        Err(format!(
+            "Configured Pi Binary Path '{path}' does not resolve to a supported Pi Coding Agent installation with Node >=22.19."
+        ))
+    } else {
+        Err("Pi Coding Agent or a compatible Node >=22.19 runtime was not found.".into())
+    }
 }
 
 fn worker_path() -> Result<PathBuf, String> {
@@ -296,7 +337,7 @@ fn worker_path() -> Result<PathBuf, String> {
 
 impl PiBridge {
     pub async fn initialize(cfg: &Value) -> Result<Self, String> {
-        let location = locate_pi().await?;
+        let location = locate_pi(cfg).await?;
         let fs_root = fs::canonicalize(expand_home(
             cfg.get("fsRoot").and_then(Value::as_str).unwrap_or("~/"),
         ))
@@ -308,6 +349,7 @@ impl PiBridge {
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
+            .kill_on_drop(true)
             .spawn()
             .map_err(|error| error.to_string())?;
         let stdin = child
@@ -595,6 +637,16 @@ fn classify_tool(name: &str) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn configured_pi_path_fails_closed_when_missing() {
+        let cfg = json!({"piBinaryPath": "/definitely/missing/aura-pi"});
+        let error = match locate_pi(&cfg).await {
+            Ok(_) => panic!("configured Pi path must not fall back to auto-detection"),
+            Err(error) => error,
+        };
+        assert!(error.contains("Configured Pi Binary Path"));
+    }
 
     #[tokio::test]
     #[ignore = "requires the user's local Pi installation and Aura Pi tool selection"]

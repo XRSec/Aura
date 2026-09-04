@@ -522,6 +522,16 @@ async fn get_tokens(
     Ok(runtime.auth.active_tokens().await)
 }
 
+#[tauri::command]
+fn get_app_version(app: tauri::AppHandle) -> String {
+    app.package_info().version.to_string()
+}
+
+#[tauri::command]
+fn log_runtime(app: tauri::AppHandle, level: String, message: String) {
+    runtime::emit_runtime(&app, &level, &message);
+}
+
 fn logs_path() -> PathBuf {
     config::config_path().with_file_name("aura-logs.json")
 }
@@ -791,6 +801,8 @@ pub fn run() {
             toggle_service_state,
             restart_tunnel,
             get_tokens,
+            get_app_version,
+            log_runtime,
             get_recent_logs,
             clear_recent_logs,
             revoke_token,

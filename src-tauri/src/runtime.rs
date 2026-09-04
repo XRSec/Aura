@@ -691,6 +691,22 @@ fn resolve_safe_path(fs_root: &str, target: &str) -> Result<PathBuf, String> {
     Ok(candidate)
 }
 
+fn bounded_log_text(value: &str) -> String {
+    const LIMIT: usize = 5000;
+    if value.len() <= LIMIT {
+        return value.to_string();
+    }
+    let mut end = LIMIT;
+    while !value.is_char_boundary(end) {
+        end -= 1;
+    }
+    format!(
+        "{}... [truncated {} chars]",
+        &value[..end],
+        value.chars().count()
+    )
+}
+
 #[derive(Clone)]
 struct AuraMcpServer {
     app: Option<tauri::AppHandle>,
@@ -727,7 +743,7 @@ impl AuraMcpServer {
                 "output": output.map(serde_json::Value::String).unwrap_or(serde_json::Value::Null),
                 "error": error.map(serde_json::Value::String).unwrap_or(serde_json::Value::Null),
                 "duration": duration,
-                "http": serde_json::Value::Null
+                "http": crate::http_logger::current_http_context().unwrap_or(serde_json::Value::Null)
             });
             crate::runtime::emit_mcp_log(app, entry);
         }
@@ -789,19 +805,42 @@ impl AuraMcpServer {
                     move |context: ToolCallContext<'_, AuraMcpServer>| {
                         let route_name = route_name.clone();
                         Box::pin(async move {
-                            let Some(bridge) = context.service.pi.clone() else {
-                                return Ok(CallToolResult::error(vec![ContentBlock::text(
-                                    "Pi bridge is unavailable.",
-                                )])
-                                .into());
-                            };
+                            let started = std::time::Instant::now();
                             let args = Value::Object(context.arguments.unwrap_or_default());
+                            let log_params = args.clone();
+                            let Some(bridge) = context.service.pi.clone() else {
+                                let error = "Pi bridge is unavailable.".to_string();
+                                context.service.log_execution(
+                                    &route_name,
+                                    log_params,
+                                    "Error",
+                                    None,
+                                    Some(error.clone()),
+                                    started.elapsed().as_millis() as u64,
+                                );
+                                return Ok(
+                                    CallToolResult::error(vec![ContentBlock::text(error)]).into()
+                                );
+                            };
                             match bridge.execute(&route_name, args).await {
                                 Ok(result) => {
                                     let is_error = result
                                         .get("isError")
                                         .and_then(Value::as_bool)
                                         .unwrap_or(false);
+                                    let log_text = result
+                                        .get("logText")
+                                        .and_then(Value::as_str)
+                                        .map(bounded_log_text)
+                                        .unwrap_or_else(|| "(Non-text Pi result)".into());
+                                    context.service.log_execution(
+                                        &route_name,
+                                        log_params,
+                                        if is_error { "Error" } else { "Success" },
+                                        (!is_error).then(|| log_text.clone()),
+                                        is_error.then(|| log_text.clone()),
+                                        started.elapsed().as_millis() as u64,
+                                    );
                                     let mut content = result
                                         .get("content")
                                         .and_then(Value::as_array)
@@ -818,11 +857,7 @@ impl AuraMcpServer {
                                         })
                                         .unwrap_or_default();
                                     if content.is_empty() {
-                                        let text = result
-                                            .get("logText")
-                                            .and_then(Value::as_str)
-                                            .unwrap_or("(Non-text Pi result)");
-                                        content.push(ContentBlock::text(text));
+                                        content.push(ContentBlock::text(log_text));
                                     }
                                     let result = if is_error {
                                         CallToolResult::error(content)
@@ -832,6 +867,14 @@ impl AuraMcpServer {
                                     Ok(result.into())
                                 }
                                 Err(error) => {
+                                    context.service.log_execution(
+                                        &route_name,
+                                        log_params,
+                                        "Error",
+                                        None,
+                                        Some(error.clone()),
+                                        started.elapsed().as_millis() as u64,
+                                    );
                                     Ok(CallToolResult::error(vec![ContentBlock::text(error)])
                                         .into())
                                 }
@@ -872,16 +915,11 @@ impl AuraMcpServer {
         let duration = started.elapsed().as_millis() as u64;
         match result {
             Ok(content) => {
-                let mut truncated = content.clone();
-                if truncated.len() > 5000 {
-                    truncated.truncate(5000);
-                    truncated.push_str(&format!("... [truncated {} chars]", content.len()));
-                }
                 self.log_execution(
                     "read_file",
                     serde_json::json!({"path": request.path}),
                     "Success",
-                    Some(truncated),
+                    Some(bounded_log_text(&content)),
                     None,
                     duration,
                 );
@@ -903,39 +941,71 @@ impl AuraMcpServer {
 
     #[tool(description = "Create or overwrite a UTF-8 file inside Aura Filesystem Root.")]
     async fn write_file(&self, Parameters(request): Parameters<WriteFileRequest>) -> String {
-        let path = match resolve_safe_path(self.fs_root(), &request.path) {
-            Ok(path) => path,
-            Err(error) => return format!("Error: {error}"),
-        };
-        if let Some(parent) = path.parent() {
-            if let Err(error) = fs::create_dir_all(parent) {
-                return format!("Error: {error}");
-            }
-            if let Ok(real_parent) = fs::canonicalize(parent) {
-                let Ok(real_root) = fs::canonicalize(expand_home(self.fs_root())) else {
-                    return "Error: Filesystem Root is unavailable.".into();
-                };
-                if !real_parent.starts_with(real_root) {
-                    return "Error: Access denied: resolved parent is outside Filesystem Root."
-                        .into();
+        let started = std::time::Instant::now();
+        let params = serde_json::json!({
+            "path": request.path,
+            "bytes": request.content.len()
+        });
+        let result = (|| -> Result<String, String> {
+            let path = resolve_safe_path(self.fs_root(), &request.path)?;
+            if let Some(parent) = path.parent() {
+                fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+                if let Ok(real_parent) = fs::canonicalize(parent) {
+                    let real_root = fs::canonicalize(expand_home(self.fs_root()))
+                        .map_err(|_| "Filesystem Root is unavailable.".to_string())?;
+                    if !real_parent.starts_with(real_root) {
+                        return Err(
+                            "Access denied: resolved parent is outside Filesystem Root.".into()
+                        );
+                    }
                 }
             }
-        }
-        match fs::write(&path, request.content.as_bytes()) {
-            Ok(()) => format!("Successfully wrote to {}", request.path),
-            Err(error) => format!("Error: {error}"),
+            fs::write(&path, request.content.as_bytes()).map_err(|error| error.to_string())?;
+            Ok(format!("Successfully wrote to {}", request.path))
+        })();
+        let duration = started.elapsed().as_millis() as u64;
+        match result {
+            Ok(message) => {
+                self.log_execution(
+                    "write_file",
+                    params,
+                    "Success",
+                    Some(message.clone()),
+                    None,
+                    duration,
+                );
+                message
+            }
+            Err(error) => {
+                self.log_execution(
+                    "write_file",
+                    params,
+                    "Error",
+                    None,
+                    Some(error.clone()),
+                    duration,
+                );
+                format!("Error: {error}")
+            }
         }
     }
 
     #[tool(description = "Execute a shell command under Aura Shell Policy.")]
     async fn execute_shell(&self, Parameters(request): Parameters<ExecuteShellRequest>) -> String {
-        let command = request.command.trim();
-        let base = command.split_whitespace().next().unwrap_or_default();
+        let started = std::time::Instant::now();
+        let command = request.command.trim().to_string();
+        let base = command
+            .split_whitespace()
+            .next()
+            .unwrap_or_default()
+            .to_string();
         let policy = self
             .config
             .get("shellPolicy")
             .and_then(Value::as_str)
-            .unwrap_or("unrestricted");
+            .unwrap_or("unrestricted")
+            .to_string();
+        let params = serde_json::json!({"command": command, "policy": policy});
         let allowlist = self
             .config
             .get("shellAllowlist")
@@ -954,23 +1024,41 @@ impl AuraMcpServer {
                 .filter_map(Value::as_str)
                 .any(|item| item == value)
         };
-        if policy == "allowlist" && !contains(&allowlist, base) {
-            return format!("Error: Command '{base}' is not in the allowlist.");
+        if policy == "allowlist" && !contains(&allowlist, &base) {
+            let error = format!("Command '{base}' is not in the allowlist.");
+            self.log_execution(
+                "execute_shell",
+                params,
+                "Error",
+                None,
+                Some(error.clone()),
+                started.elapsed().as_millis() as u64,
+            );
+            return format!("Error: {error}");
         }
-        if policy == "denylist" && contains(&denylist, base) {
-            return format!("Error: Command '{base}' is explicitly blocked by denylist.");
+        if policy == "denylist" && contains(&denylist, &base) {
+            let error = format!("Command '{base}' is explicitly blocked by denylist.");
+            self.log_execution(
+                "execute_shell",
+                params,
+                "Error",
+                None,
+                Some(error.clone()),
+                started.elapsed().as_millis() as u64,
+            );
+            return format!("Error: {error}");
         }
 
         #[cfg(target_os = "windows")]
         let mut process = {
             let mut process = Command::new("cmd.exe");
-            process.args(["/C", command]);
+            process.args(["/C", &command]);
             process
         };
         #[cfg(not(target_os = "windows"))]
         let mut process = {
             let mut process = Command::new("/bin/sh");
-            process.args(["-lc", command]);
+            process.args(["-lc", &command]);
             process
         };
         process.current_dir(home_dir());
@@ -985,83 +1073,138 @@ impl AuraMcpServer {
                     text.push_str("STDERR:\n");
                     text.push_str(&stderr);
                 }
-                if !output.status.success() {
+                let is_error = !output.status.success();
+                if is_error {
                     text.push_str(&format!("\nERROR: process exited with {}", output.status));
                 }
-                if text.trim().is_empty() {
-                    "Command executed successfully with no output.".into()
+                let text = if text.trim().is_empty() {
+                    "Command executed successfully with no output.".to_string()
                 } else {
                     text.trim().to_string()
-                }
+                };
+                self.log_execution(
+                    "execute_shell",
+                    params,
+                    if is_error { "Error" } else { "Success" },
+                    Some(bounded_log_text(&text)),
+                    is_error.then(|| format!("process exited with {}", output.status)),
+                    started.elapsed().as_millis() as u64,
+                );
+                text
             }
-            Err(error) => format!("Error: {error}"),
+            Err(error) => {
+                let error = error.to_string();
+                self.log_execution(
+                    "execute_shell",
+                    params,
+                    "Error",
+                    None,
+                    Some(error.clone()),
+                    started.elapsed().as_millis() as u64,
+                );
+                format!("Error: {error}")
+            }
         }
     }
 
     #[tool(description = "List reusable Skills available to Aura.")]
     async fn list_skills(&self) -> String {
-        if let Some(pi) = self.pi.as_ref() {
+        let started = std::time::Instant::now();
+        let output = if let Some(pi) = self.pi.as_ref() {
             if pi.skills.is_empty() {
-                return "(No Pi Skills discovered.)".into();
+                "(No Pi Skills discovered.)".into()
+            } else {
+                pi.skills
+                    .iter()
+                    .map(|skill| {
+                        let source = skill
+                            .source_info
+                            .as_ref()
+                            .and_then(|value| value.get("source").or_else(|| value.get("path")))
+                            .and_then(Value::as_str)
+                            .unwrap_or("pi");
+                        format!(
+                            "- {}: {}\n  source: {}\n  directory: {}",
+                            skill.name,
+                            if skill.description.is_empty() {
+                                "No description provided."
+                            } else {
+                                &skill.description
+                            },
+                            source,
+                            skill.base_dir
+                        )
+                    })
+                    .collect::<Vec<_>>()
+                    .join("\n")
             }
-            return pi
-                .skills
-                .iter()
-                .map(|skill| {
-                    let source = skill
-                        .source_info
-                        .as_ref()
-                        .and_then(|value| value.get("source").or_else(|| value.get("path")))
-                        .and_then(Value::as_str)
-                        .unwrap_or("pi");
-                    format!(
-                        "- {}: {}\n  source: {}\n  directory: {}",
-                        skill.name,
-                        if skill.description.is_empty() {
-                            "No description provided."
-                        } else {
-                            &skill.description
-                        },
-                        source,
-                        skill.base_dir
-                    )
-                })
-                .collect::<Vec<_>>()
-                .join("\n");
-        }
-        let discovered = skills::discover(self.fs_root());
-        if discovered.is_empty() {
-            return "(No local Skills discovered.)".into();
-        }
-        discovered
-            .into_iter()
-            .map(|skill| {
-                format!(
-                    "- {}: {}\n  source: {}\n  directory: {}",
-                    skill.name,
-                    if skill.description.is_empty() {
-                        "No description provided."
-                    } else {
-                        &skill.description
-                    },
-                    skill.source,
-                    skill.dir.display()
-                )
-            })
-            .collect::<Vec<_>>()
-            .join("\n")
+        } else {
+            let discovered = skills::discover(self.fs_root());
+            if discovered.is_empty() {
+                "(No local Skills discovered.)".into()
+            } else {
+                discovered
+                    .into_iter()
+                    .map(|skill| {
+                        format!(
+                            "- {}: {}\n  source: {}\n  directory: {}",
+                            skill.name,
+                            if skill.description.is_empty() {
+                                "No description provided."
+                            } else {
+                                &skill.description
+                            },
+                            skill.source,
+                            skill.dir.display()
+                        )
+                    })
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            }
+        };
+        self.log_execution(
+            "list_skills",
+            serde_json::json!({}),
+            "Success",
+            Some(bounded_log_text(&output)),
+            None,
+            started.elapsed().as_millis() as u64,
+        );
+        output
     }
 
     #[tool(description = "Read SKILL.md or another text file inside a selected Skill directory.")]
     async fn read_skill(&self, Parameters(request): Parameters<ReadSkillRequest>) -> String {
+        let started = std::time::Instant::now();
+        let params = serde_json::json!({"skill": request.skill, "path": request.path});
         let result = if let Some(pi) = self.pi.as_ref() {
             pi.read_skill(&request.skill, &request.path)
         } else {
             skills::read(self.fs_root(), &request.skill, &request.path)
         };
         match result {
-            Ok(content) => content,
-            Err(error) => format!("Error: {error}"),
+            Ok(content) => {
+                self.log_execution(
+                    "read_skill",
+                    params,
+                    "Success",
+                    Some(bounded_log_text(&content)),
+                    None,
+                    started.elapsed().as_millis() as u64,
+                );
+                content
+            }
+            Err(error) => {
+                self.log_execution(
+                    "read_skill",
+                    params,
+                    "Error",
+                    None,
+                    Some(error.clone()),
+                    started.elapsed().as_millis() as u64,
+                );
+                format!("Error: {error}")
+            }
         }
     }
 
@@ -1070,26 +1213,48 @@ impl AuraMcpServer {
         &self,
         Parameters(request): Parameters<RequestCapabilitiesRequest>,
     ) -> String {
+        let started = std::time::Instant::now();
+        let skills = request.skills.into_iter().take(16).collect::<Vec<_>>();
+        let reason = request.reason.filter(|value| !value.trim().is_empty());
+        let params = serde_json::json!({"skills": skills, "reason": reason});
         let Some(pi) = self.pi.as_ref() else {
-            return "Error: Pi bridge is unavailable.".into();
+            let error = "Pi bridge is unavailable.".to_string();
+            self.log_execution(
+                "request_capabilities",
+                params,
+                "Error",
+                None,
+                Some(error.clone()),
+                started.elapsed().as_millis() as u64,
+            );
+            return format!("Error: {error}");
         };
         let mut output = Vec::new();
-        if let Some(reason) = request.reason.filter(|value| !value.trim().is_empty()) {
+        if let Some(reason) = reason.as_ref() {
             output.push(format!("Reason: {reason}"));
         }
-        for name in request.skills.into_iter().take(16) {
-            match pi.read_skill(&name, "SKILL.md") {
+        for name in &skills {
+            match pi.read_skill(name, "SKILL.md") {
                 Ok(content) => {
                     output.push(format!("<skill name=\"{}\">\n{}\n</skill>", name, content))
                 }
                 Err(error) => output.push(format!("Skill {name}: {error}")),
             }
         }
-        if output.is_empty() {
+        let output = if output.is_empty() {
             "No Skills were loaded.".into()
         } else {
             output.join("\n\n")
-        }
+        };
+        self.log_execution(
+            "request_capabilities",
+            params,
+            "Success",
+            Some(bounded_log_text(&output)),
+            None,
+            started.elapsed().as_millis() as u64,
+        );
+        output
     }
 }
 
@@ -1111,6 +1276,7 @@ impl ServerHandler for AuraMcpServer {
 struct RuntimeInner {
     running: bool,
     starting: bool,
+    startup_cancel: Option<CancellationToken>,
     server_cancel: Option<CancellationToken>,
     server_task: Option<JoinHandle<()>>,
     tunnel: Option<Child>,
@@ -1159,6 +1325,7 @@ impl RuntimeManager {
             inner: Mutex::new(RuntimeInner {
                 running: false,
                 starting: false,
+                startup_cancel: None,
                 server_cancel: None,
                 server_task: None,
                 tunnel: None,
@@ -1173,38 +1340,30 @@ impl RuntimeManager {
         self.inner.lock().await.running
     }
 
-    async fn ensure_pi(&self, cfg: &Value) -> Result<Option<Arc<PiBridge>>, String> {
-        if !cfg
-            .get("piEnabled")
-            .and_then(Value::as_bool)
-            .unwrap_or(false)
-        {
-            return Ok(None);
-        }
-        if let Some(pi) = self.inner.lock().await.pi.clone() {
-            return Ok(Some(pi));
-        }
-
-        let _init_guard = self.pi_init.lock().await;
-        if let Some(pi) = self.inner.lock().await.pi.clone() {
-            return Ok(Some(pi));
-        }
-
-        let pi = Arc::new(PiBridge::initialize(cfg).await?);
-        self.inner.lock().await.pi = Some(pi.clone());
-        Ok(Some(pi))
-    }
-
     pub async fn start(&self, app: &AppHandle) -> Result<bool, String> {
-        {
-            let mut inner = self.inner.lock().await;
-            if inner.running {
-                return Ok(true);
+        let startup_token = CancellationToken::new();
+
+        loop {
+            let should_wait = {
+                let mut inner = self.inner.lock().await;
+                if inner.running {
+                    return Ok(true);
+                }
+                if inner.starting {
+                    if let Some(cancel) = &inner.startup_cancel {
+                        cancel.cancel();
+                    }
+                    true
+                } else {
+                    inner.starting = true;
+                    inner.startup_cancel = Some(startup_token.clone());
+                    false
+                }
+            };
+            if !should_wait {
+                break;
             }
-            if inner.starting {
-                return Err("Aura services are already starting.".into());
-            }
-            inner.starting = true;
+            tokio::time::sleep(Duration::from_millis(50)).await;
         }
 
         let result = async {
@@ -1235,27 +1394,40 @@ impl RuntimeManager {
                 &format!("Starting Aura MCP on {host}:{port}{mcp_path}"),
             );
 
-            let pi = match self.ensure_pi(&effective).await {
-                Ok(pi) => {
-                    if let Some(bridge) = pi.as_ref() {
-                        emit_runtime(
-                            app,
-                            "info",
-                            &format!(
-                                "Pi bridge ready: {} tools, {} skills (Pi {}, Node {}).",
-                                bridge.visible_tools().len(),
-                                bridge.skills.len(),
-                                bridge.version,
-                                bridge.node_version
-                            ),
-                        );
+            let pi = if effective
+                .get("piEnabled")
+                .and_then(Value::as_bool)
+                .unwrap_or(false)
+            {
+                let _init_guard = self.pi_init.lock().await;
+                let bridge = tokio::select! {
+                    _ = startup_token.cancelled() => {
+                        return Err("Aura startup cancelled.".to_string());
                     }
-                    pi
-                }
-                Err(error) => {
-                    return Err(format!("Pi bridge initialization failed: {error}"));
-                }
+                    result = PiBridge::initialize(&effective) => {
+                        result.map_err(|error| format!("Pi bridge initialization failed: {error}"))?
+                    }
+                };
+                let bridge = Arc::new(bridge);
+                emit_runtime(
+                    app,
+                    "info",
+                    &format!(
+                        "Pi bridge ready: {} tools, {} skills (Pi {}, Node {}).",
+                        bridge.visible_tools().len(),
+                        bridge.skills.len(),
+                        bridge.version,
+                        bridge.node_version
+                    ),
+                );
+                Some(bridge)
+            } else {
+                None
             };
+
+            if startup_token.is_cancelled() {
+                return Err("Aura startup cancelled.".into());
+            }
 
             let allowed_hosts = build_allowed_hosts(&effective);
             let stream_config = StreamableHttpServerConfig::default()
@@ -1306,6 +1478,10 @@ impl RuntimeManager {
                 .merge(protected)
                 .layer(CorsLayer::permissive());
 
+            if startup_token.is_cancelled() {
+                return Err("Aura startup cancelled.".into());
+            }
+
             let address: SocketAddr = format!("{host}:{port}")
                 .parse()
                 .map_err(|error| format!("Invalid listen address: {error}"))?;
@@ -1328,21 +1504,59 @@ impl RuntimeManager {
                 }
             });
 
-            let tunnel = match start_tunnel(app, &effective).await {
-                Ok(child) => child,
+            let tunnel_result = tokio::select! {
+                _ = startup_token.cancelled() => {
+                    Err("Aura startup cancelled.".to_string())
+                }
+                result = start_tunnel(app, &effective) => {
+                    result.map_err(|error| format!("Failed to start tunnel: {error}"))
+                }
+            };
+            let mut tunnel = match tunnel_result {
+                Ok(tunnel) => tunnel,
                 Err(error) => {
                     cancel.cancel();
                     let _ = task.await;
-                    return Err(format!("Failed to start tunnel: {error}"));
+                    return Err(error);
                 }
             };
+
+            if startup_token.is_cancelled() {
+                cancel.cancel();
+                if let Some(child) = tunnel.as_mut() {
+                    let _ = child.kill().await;
+                    let _ = child.wait().await;
+                }
+                let _ = task.await;
+                return Err("Aura startup cancelled.".into());
+            }
 
             Ok::<_, String>((cancel, task, tunnel, pi))
         }
         .await;
 
         match result {
-            Ok((cancel, task, tunnel, pi)) => {
+            Ok((cancel, task, mut tunnel, pi)) => {
+                if startup_token.is_cancelled() {
+                    cancel.cancel();
+                    if let Some(child) = tunnel.as_mut() {
+                        let _ = child.kill().await;
+                        let _ = child.wait().await;
+                    }
+                    let _ = task.await;
+                    if let Some(pi) = pi {
+                        pi.shutdown().await;
+                    }
+                    let mut inner = self.inner.lock().await;
+                    inner.running = false;
+                    inner.starting = false;
+                    inner.startup_cancel = None;
+                    drop(inner);
+                    let _ = app.emit("service-state-changed", false);
+                    emit_runtime(app, "warn", "Aura startup was cancelled.");
+                    return Err("Aura startup cancelled.".into());
+                }
+
                 let mut inner = self.inner.lock().await;
                 inner.server_cancel = Some(cancel);
                 inner.server_task = Some(task);
@@ -1350,6 +1564,7 @@ impl RuntimeManager {
                 inner.pi = pi;
                 inner.running = true;
                 inner.starting = false;
+                inner.startup_cancel = None;
                 drop(inner);
                 let _ = app.emit("service-state-changed", true);
                 emit_runtime(app, "info", "Aura MCP services are running.");
@@ -1357,15 +1572,16 @@ impl RuntimeManager {
             }
             Err(error) => {
                 let mut inner = self.inner.lock().await;
-                inner.starting = false;
                 inner.running = false;
-                let pi = inner.pi.take();
+                inner.starting = false;
+                inner.startup_cancel = None;
                 drop(inner);
-                if let Some(pi) = pi {
-                    pi.shutdown().await;
-                }
                 let _ = app.emit("service-state-changed", false);
-                emit_runtime(app, "error", &format!("Aura startup failed: {error}"));
+                if error != "Aura startup cancelled." {
+                    emit_runtime(app, "error", &format!("Aura startup failed: {error}"));
+                } else {
+                    emit_runtime(app, "warn", "Aura startup was cancelled.");
+                }
                 Err(error)
             }
         }
@@ -1374,6 +1590,11 @@ impl RuntimeManager {
     pub async fn stop(&self, app: &AppHandle) -> Result<bool, String> {
         let (cancel, task, mut tunnel, pi) = {
             let mut inner = self.inner.lock().await;
+            if inner.starting {
+                if let Some(cancel) = inner.startup_cancel.take() {
+                    cancel.cancel();
+                }
+            }
             if !inner.running {
                 return Ok(false);
             }
@@ -1405,14 +1626,27 @@ impl RuntimeManager {
 
     pub async fn pi_capabilities(&self) -> Value {
         let cfg = config::effective(&config::load(), None);
-        match self.ensure_pi(&cfg).await {
-            Ok(Some(pi)) => pi_capabilities_value(&pi),
-            Ok(None) => json!({
-                "available": false,
-                "version": null,
-                "tools": [],
-                "error": "Pi capabilities are disabled in Aura Settings."
-            }),
+        // Do not return disabled just because it's turned off in settings,
+        // the user is trying to inspect the available tools in the UI.
+
+        let existing = self.inner.lock().await.pi.clone();
+        if let Some(pi) = existing {
+            return pi_capabilities_value(&pi);
+        }
+
+        let _init_guard = self.pi_init.lock().await;
+        let recheck = self.inner.lock().await.pi.clone();
+        if let Some(pi) = recheck {
+            return pi_capabilities_value(&pi);
+        }
+
+        // Temporarily instantiate to probe tools
+        match PiBridge::initialize(&cfg).await {
+            Ok(pi) => {
+                let val = pi_capabilities_value(&pi);
+                pi.shutdown().await;
+                val
+            }
             Err(error) => json!({
                 "available": false,
                 "version": null,
@@ -1473,17 +1707,16 @@ fn oauth_router(state: Arc<WebState>, mcp_path: &str) -> Router {
         .with_state(state)
 }
 
-fn emit_runtime(app: &AppHandle, level: &str, message: &str) {
-    let _ = app.emit(
-        "runtime-log",
-        json!({
-            "timestamp": now_ms(),
-            "level": level,
-            "source": "App",
-            "message": message,
-            "detail": null
-        }),
-    );
+pub(crate) fn emit_runtime(app: &AppHandle, level: &str, message: &str) {
+    let entry = json!({
+        "timestamp": now_ms(),
+        "level": level,
+        "source": "App",
+        "message": message,
+        "detail": null
+    });
+    push_recent_log("runtime", &entry);
+    let _ = app.emit("runtime-log", entry);
 }
 
 fn emit_tunnel(app: &AppHandle, level: &str, message: &str) {
@@ -1797,7 +2030,10 @@ async fn start_tunnel(app: &AppHandle, effective: &Value) -> Result<Option<Child
         _ => return Ok(None),
     }
 
-    command.stdout(Stdio::piped()).stderr(Stdio::piped());
+    command
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .kill_on_drop(true);
     let mut child = command.spawn().map_err(|error| error.to_string())?;
     emit_tunnel(
         app,
@@ -2032,16 +2268,7 @@ mod tests {
         let server_config = test_cfg.clone();
         let mcp_service: StreamableHttpService<AuraMcpServer, LocalSessionManager> =
             StreamableHttpService::new(
-                {
-                    let app = app.clone();
-                    move || {
-                        Ok(AuraMcpServer::new(
-                            Some(app.clone()),
-                            server_config.clone(),
-                            None,
-                        ))
-                    }
-                },
+                move || Ok(AuraMcpServer::new(None, server_config.clone(), None)),
                 Default::default(),
                 stream_config,
             );
@@ -2052,11 +2279,10 @@ mod tests {
             resource_url: "https://t.xrsec.fun/test-mcp".into(),
             admin_secret_marker: None,
         });
-        let http_logger_state = app.clone();
         let protected = Router::new()
             .nest_service(mcp_path, mcp_service)
             .layer(middleware::from_fn_with_state(
-                Some(http_logger_state),
+                None::<AppHandle>,
                 crate::http_logger::log_http_request,
             ))
             .route_layer(middleware::from_fn_with_state(
@@ -2374,7 +2600,8 @@ pub fn emit_mcp_log(app: &tauri::AppHandle, entry: serde_json::Value) {
 }
 
 pub fn emit_http_log(app: &tauri::AppHandle, entry: serde_json::Value) {
-    // Convert it to an MCP log format so the frontend can render it!
+    push_recent_log("http", &entry);
+    let _ = tauri::Emitter::emit(app, "http-log", entry.clone());
     let formatted = serde_json::json!({
         "timestamp": entry.get("timestamp").cloned().unwrap_or(serde_json::json!(crate::runtime::now_ms())),
         "tool": serde_json::Value::Null,
