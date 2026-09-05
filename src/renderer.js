@@ -124,13 +124,16 @@ const ZH_TRANSLATIONS = {
   'Loading default tools...': '正在加载默认工具…',
   'Loading default Aura capabilities...': '正在加载 Aura 默认能力…',
   'Use Pi Capabilities': '使用 Pi 能力',
-  'Selected Pi tools are exposed and enabled immediately for each MCP connection. Disabled by default.': '选中的 Pi 工具会在每个 MCP 连接中立即暴露并启用。默认关闭。',
+  'Selected Pi tools form the requestable allowlist. They start inactive and are enabled on demand with request_capabilities; active tools remain available for the current Pi session.': '选中的 Pi 工具仅进入可申请白名单，默认不激活；客户端通过 request_capabilities 按需启用，已激活工具在当前 Pi 会话内保持可用。',
   'Loading Pi tools...': '正在加载 Pi 工具…',
   'Select visible': '选择当前可见',
   'Clear visible': '清除当前可见',
      'Enable Pi capabilities to load the available tool registry.': '启用 Pi 能力以加载可用工具注册表。',
   'Local Tool Sandbox': '本地工具沙箱',
   'Filesystem Root': '文件系统根目录',
+  'Environment PATH': '环境 PATH',
+  'Leave empty to detect PATH from the user shell when Aura starts; the detected value is saved automatically.': '留空时，Aura 会在启动时从用户 Shell 检测 PATH，并自动保存检测结果。',
+  'Auto detect from user shell': '从用户 Shell 自动检测',
   'Shell Policy': 'Shell 策略',
   'Unrestricted': '不限制',
   'Allow all': '全部允许',
@@ -1156,6 +1159,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (config.fsRoot) {
     document.getElementById('fs-root').value = config.fsRoot;
   }
+  const environmentPathInput = document.getElementById('environment-path');
+  if (environmentPathInput) {
+    environmentPathInput.value = typeof config.environmentPath === 'string' ? config.environmentPath : '';
+  }
   const adminPassInput = document.getElementById('admin-pass');
   if (adminPassInput) {
     if (config.adminSecretNeedsReset) {
@@ -1192,7 +1199,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   [cfPathInput, mcpUrlInput, listenHostInput, listenPortInput, openaiBinaryInput, openaiTunnelIdInput, openaiApiKeyInput].filter(Boolean).forEach(input => {
     input.dataset.savedValue = input.value;
   });
-  [document.getElementById('fs-root'), document.getElementById('shell-allow'), document.getElementById('shell-deny')]
+  [document.getElementById('fs-root'), environmentPathInput, document.getElementById('shell-allow'), document.getElementById('shell-deny')]
     .filter(Boolean)
     .forEach(input => {
       input.dataset.savedValue = input.value;
@@ -1303,12 +1310,14 @@ function updateSandboxSaveState() {
   const saveBtn = document.getElementById('save-sandbox-btn');
   const policyInput = document.getElementById('shell-policy-display');
   const fsInput = document.getElementById('fs-root');
+  const environmentPathInput = document.getElementById('environment-path');
   const allowInput = document.getElementById('shell-allow');
   const denyInput = document.getElementById('shell-deny');
-  if (!saveBtn || !policyInput || !fsInput || !allowInput || !denyInput) return;
+  if (!saveBtn || !policyInput || !fsInput || !environmentPathInput || !allowInput || !denyInput) return;
 
   const dirty = (policyInput.getAttribute('data-value') ?? '') !== (policyInput.dataset.savedValue ?? '')
     || fsInput.value.trim() !== (fsInput.dataset.savedValue ?? '').trim()
+    || environmentPathInput.value !== (environmentPathInput.dataset.savedValue ?? '')
     || allowInput.value.trim() !== (allowInput.dataset.savedValue ?? '').trim()
     || denyInput.value.trim() !== (denyInput.dataset.savedValue ?? '').trim();
 
@@ -1655,8 +1664,20 @@ document.getElementById('power-btn').addEventListener('click', async () => {
   }
 });
 
-window.api.onServiceStateChanged((isRunning) => {
+window.api.onServiceStateChanged(async (isRunning) => {
   updateServiceUI(isRunning);
+  const environmentPathInput = document.getElementById('environment-path');
+  if (!environmentPathInput || environmentPathInput.value !== (environmentPathInput.dataset.savedValue ?? '')) return;
+  try {
+    const config = await window.api.getConfig();
+    if (typeof config.environmentPath === 'string') {
+      environmentPathInput.value = config.environmentPath;
+      environmentPathInput.dataset.savedValue = config.environmentPath;
+      scheduleUpdateSandboxSaveState();
+    }
+  } catch (error) {
+    console.error('Failed to refresh Environment PATH:', error);
+  }
 });
 
 document.getElementById('auto-connect-toggle').addEventListener('change', async (e) => {
@@ -2159,6 +2180,7 @@ async function saveNetworkSettings() {
   if (networkSaveBtn) networkSaveBtn.classList.add('is-loading');
   try {
     const mode = getCurrentMode();
+    const wasRunning = await window.api.getServiceState();
     const configPayload = {
       tunnelMode: mode,
       cfConfigPath: cfPathInput ? cfPathInput.value.trim() : '',
@@ -2193,7 +2215,7 @@ async function saveNetworkSettings() {
 
     updateNetworkSaveState();
     renderConnectionGuide(mode, urlInput ? urlInput.value : '');
-    await restartCurrentServices(mode);
+    if (wasRunning) await restartCurrentServices(mode);
     if (networkSaveBtn) flashSaveFeedback(networkSaveBtn);
   } catch (err) {
     console.error('Failed to save network settings:', err);
@@ -2225,6 +2247,8 @@ async function saveAccessSettings() {
         accessSaveBtn.classList.remove('btn-primary');
         flashSaveFeedback(accessSaveBtn);
       }
+      const isRunning = await window.api.getServiceState();
+      if (isRunning && getCurrentMode() !== 'openai') await restartCurrentServices();
     }
   } finally {
     if (accessSaveBtn) accessSaveBtn.classList.remove('is-loading');
@@ -2247,12 +2271,6 @@ async function saveMcpCapabilitySettings() {
   const selectedTools = getSelectedPiToolNames();
   const selectedToolSet = new Set(selectedTools);
   const allowPiModelTools = piCapabilityTools.some(tool => tool.usesPiDefaultModel && selectedToolSet.has(tool.name));
-  const mcpContractChanged = instructions.value !== savedMcpInstructions
-    || defaultToggle.checked !== savedDefaultCapabilitiesEnabled
-    || JSON.stringify(selectedDefaultTools) !== JSON.stringify(Array.from(savedDefaultToolNames).sort())
-    || piToggle.checked !== savedPiEnabled
-    || (piBinaryInput && piBinaryInput.value.trim() !== (piBinaryInput.dataset.savedValue || ''))
-    || JSON.stringify(selectedTools) !== JSON.stringify(Array.from(savedPiToolNames).sort());
 
   saveBtn.classList.add('is-loading');
   try {
@@ -2277,12 +2295,6 @@ async function saveMcpCapabilitySettings() {
     updateMcpCapabilitiesSaveState();
     flashSaveFeedback(saveBtn);
 
-    if (mcpContractChanged) {
-      window.alert(currentLanguage === 'zh-CN'
-        ? '保存成功。MCP 指令或工具能力已更新。\n\n请前往 ChatGPT 插件页面点击“刷新”，或重新连接 Aura，以加载最新的工具 Schema。'
-        : 'Saved successfully. MCP instructions or tool capabilities were updated.\n\nOpen the ChatGPT plugin page and click “Refresh”, or reconnect Aura to load the latest tool schemas.');
-    }
-
     const isRunning = await window.api.getServiceState();
     if (isRunning) await restartCurrentServices();
   } catch (err) {
@@ -2296,6 +2308,7 @@ async function saveMcpCapabilitySettings() {
 async function saveSandboxSettings() {
   const sandboxSaveBtn = document.getElementById('save-sandbox-btn');
   const fsInput = document.getElementById('fs-root');
+  const environmentPathInput = document.getElementById('environment-path');
   const allowInput = document.getElementById('shell-allow');
   const denyInput = document.getElementById('shell-deny');
   const policyInput = document.getElementById('shell-policy-display');
@@ -2306,16 +2319,19 @@ async function saveSandboxSettings() {
     await window.api.saveConfig({
       shellPolicy: policy,
       fsRoot: fsInput ? fsInput.value : '~/',
+      environmentPath: environmentPathInput ? environmentPathInput.value : '',
       shellAllowlist: allowInput ? allowInput.value.split(',').map(s => s.trim()).filter(Boolean) : [],
       shellDenylist: denyInput ? denyInput.value.split(',').map(s => s.trim()).filter(Boolean) : []
     });
-    [fsInput, allowInput, denyInput].filter(Boolean).forEach(input => { input.dataset.savedValue = input.value; });
+    [fsInput, environmentPathInput, allowInput, denyInput].filter(Boolean).forEach(input => { input.dataset.savedValue = input.value; });
     if (policyInput) policyInput.dataset.savedValue = policy;
     if (sandboxSaveBtn) {
       sandboxSaveBtn.classList.remove('btn-primary');
       flashSaveFeedback(sandboxSaveBtn);
     }
     updateShellStatus(policy);
+    const isRunning = await window.api.getServiceState();
+    if (isRunning) await restartCurrentServices();
   } finally {
     if (sandboxSaveBtn) sandboxSaveBtn.classList.remove('is-loading');
   }
@@ -2360,6 +2376,12 @@ document.addEventListener('click', (event) => {
   if (subtabM) {
     event.preventDefault();
     switchLogSubtab('mcp');
+    return;
+  }
+  const subtabT = target.closest('#log-subtab-tunnel');
+  if (subtabT) {
+    event.preventDefault();
+    switchLogSubtab('tunnel');
     return;
   }
   const subtabR = target.closest('#log-subtab-runtime');
@@ -2927,7 +2949,7 @@ function createMcpLogElement(entry) {
       else summaryText = JSON.stringify(entry.params);
     }
   } else {
-    summaryText = `${httpCtx?.url || '/'} (${httpCtx?.ip || '127.0.0.1'})`;
+    summaryText = httpCtx?.url || '/';
   }
 
   // Summary row
@@ -2948,7 +2970,21 @@ function createMcpLogElement(entry) {
       methodBadge.className = `http-method-badge http-method-${method}`;
       methodBadge.textContent = method;
       lead.appendChild(methodBadge);
+
+      if (httpCtx.status) {
+        const statusBadge = document.createElement('span');
+        const status = Number(httpCtx.status);
+        const statusGroup = status >= 500 ? '5xx' : (status >= 400 ? '4xx' : (status >= 300 ? '3xx' : '2xx'));
+        statusBadge.className = `http-status-badge http-status-${statusGroup}`;
+        statusBadge.textContent = String(status);
+        lead.appendChild(statusBadge);
+      }
     }
+
+    const mcpBadge = document.createElement('span');
+    mcpBadge.className = 'mcp-protocol-badge';
+    mcpBadge.textContent = 'MCP';
+    lead.appendChild(mcpBadge);
 
     const toolBadge = document.createElement('span');
     const catClass = getToolCategoryClass(entry.tool);
@@ -3052,7 +3088,7 @@ function createMcpLogElement(entry) {
 
     const argsTitle = document.createElement('span');
     argsTitle.className = 'detail-section-title';
-    argsTitle.textContent = t('Tool Arguments');
+    argsTitle.textContent = `MCP · ${entry.mcpMethod || 'tools/call'} · ${entry.tool || 'tool'} · ${t('Tool Arguments')}`;
     argsHeader.appendChild(argsTitle);
 
     const paramsText = JSON.stringify(entry.params || {}, null, 2);

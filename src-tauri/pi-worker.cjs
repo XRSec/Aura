@@ -43,7 +43,16 @@ async function initialize(params) {
   const created = await sdk.createAgentSession({ cwd: params.cwd, sessionManager });
   session = created.session;
 
-  if (typeof session.extendResourcesFromExtensions === 'function') {
+  if (typeof session.bindExtensions === 'function') {
+    try {
+      // Pi extensions such as pi-fff defer registerTool() until session_start.
+      // bindExtensions() emits that lifecycle event and then discovers extension resources.
+      await session.bindExtensions({ mode: 'print' });
+    } catch (error) {
+      sendMessage({ type: 'status', level: 'warn', message: 'Pi extension startup was partial.', detail: { error: error.message } });
+    }
+  } else if (typeof session.extendResourcesFromExtensions === 'function') {
+    // Backward compatibility for older Pi builds without bindExtensions().
     try {
       await session.extendResourcesFromExtensions('startup');
     } catch (error) {
@@ -76,6 +85,23 @@ async function initialize(params) {
   return { tools, skills };
 }
 
+async function disposeSession(reason = 'quit') {
+  const current = session;
+  if (!current) return;
+  session = null;
+
+  try {
+    const runner = current.extensionRunner;
+    if (runner?.hasHandlers?.('session_shutdown')) {
+      await runner.emit({ type: 'session_shutdown', reason });
+    }
+  } catch (error) {
+    sendMessage({ type: 'status', level: 'warn', message: 'Pi extension shutdown was partial.', detail: { error: error.message } });
+  }
+
+  try { current.dispose(); } catch {}
+}
+
 async function handleRequest(message) {
   const { id, method, params = {} } = message;
   try {
@@ -85,9 +111,41 @@ async function handleRequest(message) {
     }
     if (!session) throw new Error('Pi worker is not initialized.');
 
-    if (method === 'setActiveTools') {
-      session.setActiveToolsByName(Array.isArray(params.names) ? params.names : []);
+    if (method === 'getActiveTools') {
       sendResponse(id, true, { active: session.getActiveToolNames() });
+      return;
+    }
+
+    if (method === 'enableTools') {
+      const requested = [...new Set((Array.isArray(params.names) ? params.names : [])
+        .map(name => String(name || '').trim())
+        .filter(Boolean))];
+      const available = new Set(session.getAllTools().map(tool => tool.name));
+      const current = new Set(session.getActiveToolNames());
+      const enabled = [];
+      const alreadyActive = [];
+      const unknown = [];
+
+      for (const name of requested) {
+        if (!available.has(name)) {
+          unknown.push(name);
+        } else if (current.has(name)) {
+          alreadyActive.push(name);
+        } else {
+          current.add(name);
+          enabled.push(name);
+        }
+      }
+
+      if (enabled.length > 0) {
+        session.setActiveToolsByName([...current]);
+      }
+      sendResponse(id, true, {
+        enabled,
+        alreadyActive,
+        unknown,
+        active: session.getActiveToolNames()
+      });
       return;
     }
 
@@ -115,8 +173,7 @@ async function handleRequest(message) {
     }
 
     if (method === 'shutdown') {
-      try { session?.dispose(); } catch {}
-      session = null;
+      await disposeSession('quit');
       sendResponse(id, true, { ok: true });
       setImmediate(() => process.exit(0));
       return;
@@ -143,8 +200,7 @@ function receiveMessage(message) {
 if (process.send) {
   process.on('message', receiveMessage);
   process.on('disconnect', () => {
-    try { session?.dispose(); } catch {}
-    process.exit(0);
+    void disposeSession('quit').finally(() => process.exit(0));
   });
 } else {
   const input = readline.createInterface({ input: process.stdin, crlfDelay: Infinity });
@@ -152,7 +208,6 @@ if (process.send) {
     try { receiveMessage(JSON.parse(line)); } catch {}
   });
   input.on('close', () => {
-    try { session?.dispose(); } catch {}
-    process.exit(0);
+    void disposeSession('quit').finally(() => process.exit(0));
   });
 }

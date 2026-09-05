@@ -2,6 +2,7 @@ mod config;
 mod http_logger;
 mod pi;
 mod runtime;
+mod security;
 mod skills;
 
 use serde::Serialize;
@@ -339,8 +340,16 @@ fn default_binary_paths(mode: &str) -> Vec<PathBuf> {
 
 fn discover_tunnel_binaries_impl(mode: &str) -> Vec<BinaryPathOption> {
     let name = tunnel_binary_name(mode);
-    let mut search_dirs: Vec<PathBuf> =
-        env::split_paths(&env::var_os("PATH").unwrap_or_default()).collect();
+    let configured_path = config::load()
+        .get("environmentPath")
+        .and_then(Value::as_str)
+        .filter(|path| !path.trim().is_empty())
+        .map(ToOwned::to_owned);
+    let path_value = configured_path
+        .map(std::ffi::OsString::from)
+        .or_else(|| env::var_os("PATH"))
+        .unwrap_or_default();
+    let mut search_dirs: Vec<PathBuf> = env::split_paths(&path_value).collect();
     let common_dirs = common_binary_dirs();
     search_dirs.extend(common_dirs.iter().cloned());
 

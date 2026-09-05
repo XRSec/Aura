@@ -1,4 +1,4 @@
-use crate::{config, pi::PiBridge, skills};
+use crate::{config, pi::PiBridge, security, skills};
 use axum::{
     extract::{Form, Json, Query, State},
     http::{header, HeaderValue, Request, StatusCode},
@@ -9,11 +9,7 @@ use axum::{
 };
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use rmcp::{
-    handler::server::{
-        router::tool::{ToolRoute, ToolRouter},
-        tool::ToolCallContext,
-        wrapper::Parameters,
-    },
+    handler::server::{router::tool::ToolRouter, tool::ToolCallContext, wrapper::Parameters},
     model::{CallToolResult, ContentBlock, Implementation, ServerCapabilities, ServerInfo, Tool},
     schemars, tool, tool_handler, tool_router,
     transport::streamable_http_server::{
@@ -26,7 +22,7 @@ use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use std::{
     collections::{HashMap, HashSet},
-    fs,
+    env, fs,
     net::SocketAddr,
     path::{Path, PathBuf},
     process::Stdio,
@@ -72,6 +68,89 @@ fn expand_home(value: &str) -> PathBuf {
     PathBuf::from(value)
 }
 
+fn configured_environment_path(config: &Value) -> Option<&str> {
+    config
+        .get("environmentPath")
+        .and_then(Value::as_str)
+        .filter(|path| !path.trim().is_empty())
+}
+
+#[cfg(not(target_os = "windows"))]
+async fn detect_user_environment_path() -> Result<String, String> {
+    let shell = env::var_os("SHELL")
+        .map(PathBuf::from)
+        .filter(|path| path.is_file())
+        .unwrap_or_else(|| {
+            if cfg!(target_os = "macos") {
+                PathBuf::from("/bin/zsh")
+            } else {
+                PathBuf::from("/bin/sh")
+            }
+        });
+    let mut command = Command::new(&shell);
+    command
+        .args(["-lic", "printf '\\n__AURA_PATH__=%s\\n' \"$PATH\""])
+        .kill_on_drop(true);
+    let output = tokio::time::timeout(Duration::from_secs(10), command.output())
+        .await
+        .map_err(|_| format!("Timed out while reading PATH from {}.", shell.display()))?
+        .map_err(|error| format!("Failed to start {}: {error}", shell.display()))?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        return Err(if stderr.is_empty() {
+            format!("{} exited with {}.", shell.display(), output.status)
+        } else {
+            format!(
+                "{} exited with {}: {stderr}",
+                shell.display(),
+                output.status
+            )
+        });
+    }
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let path = stdout
+        .lines()
+        .rev()
+        .find_map(|line| line.strip_prefix("__AURA_PATH__="))
+        .map(ToOwned::to_owned)
+        .ok_or_else(|| format!("{} did not return PATH.", shell.display()))?;
+    if path.trim().is_empty() {
+        return Err(format!("{} returned an empty PATH.", shell.display()));
+    }
+    Ok(path)
+}
+
+#[cfg(target_os = "windows")]
+async fn detect_user_environment_path() -> Result<String, String> {
+    env::var("PATH").map_err(|error| format!("Unable to read PATH: {error}"))
+}
+
+async fn ensure_environment_path(app: &AppHandle, stored_config: &mut Value) {
+    if configured_environment_path(stored_config).is_some() {
+        return;
+    }
+    match detect_user_environment_path().await {
+        Ok(path) => {
+            if let Some(root) = stored_config.as_object_mut() {
+                root.insert("environmentPath".into(), Value::String(path));
+            }
+            match config::write(stored_config) {
+                Ok(()) => emit_runtime(app, "info", "Environment PATH auto-detected and saved."),
+                Err(error) => emit_runtime(
+                    app,
+                    "warn",
+                    &format!("Environment PATH was detected but could not be saved: {error}"),
+                ),
+            }
+        }
+        Err(error) => emit_runtime(
+            app,
+            "warn",
+            &format!("Environment PATH auto-detection failed: {error}"),
+        ),
+    }
+}
+
 fn safe_text(value: &str) -> String {
     value
         .replace('&', "&amp;")
@@ -111,8 +190,13 @@ pub fn save_admin_secret(secret: &str) -> Result<(), String> {
 }
 
 fn verify_admin_secret(configured: Option<&str>, input: &str) -> bool {
+    #[cfg(test)]
+    if let Some(expected) = configured.and_then(|value| value.strip_prefix("test:")) {
+        return input == expected;
+    }
+
     match configured.map(str::trim).filter(|value| !value.is_empty()) {
-        None => true,
+        None => false,
         Some("keyring") => keyring_entry()
             .and_then(|entry| entry.get_password().map_err(|error| error.to_string()))
             .map(|stored| stored == input)
@@ -120,6 +204,48 @@ fn verify_admin_secret(configured: Option<&str>, input: &str) -> bool {
         // Electron safeStorage blobs cannot be decrypted by the Tauri runtime.
         // Fail closed until the user explicitly stores a new password in the OS keyring.
         Some(_) => false,
+    }
+}
+
+fn parse_token_validity_seconds(raw: &str) -> u64 {
+    const MIN_SECONDS: u64 = 5 * 60;
+    const MAX_SECONDS: u64 = 365 * 24 * 60 * 60;
+    let raw = raw.trim().to_ascii_lowercase();
+    let (number, multiplier) = if let Some(value) = raw.strip_suffix('m') {
+        (value, 60_u64)
+    } else if let Some(value) = raw.strip_suffix('h') {
+        (value, 60 * 60)
+    } else if let Some(value) = raw.strip_suffix('d') {
+        (value, 24 * 60 * 60)
+    } else {
+        (raw.as_str(), 1)
+    };
+    number
+        .parse::<u64>()
+        .ok()
+        .and_then(|value| value.checked_mul(multiplier))
+        .unwrap_or(24 * 60 * 60)
+        .clamp(MIN_SECONDS, MAX_SECONDS)
+}
+
+fn token_validity_seconds() -> u64 {
+    let raw = config::load()
+        .get("tokenValidity")
+        .and_then(Value::as_str)
+        .unwrap_or("24h")
+        .to_string();
+    parse_token_validity_seconds(&raw)
+}
+
+fn format_token_duration(seconds: u64) -> String {
+    if seconds % (24 * 60 * 60) == 0 {
+        format!("{}d", seconds / (24 * 60 * 60))
+    } else if seconds % (60 * 60) == 0 {
+        format!("{}h", seconds / (60 * 60))
+    } else if seconds % 60 == 0 {
+        format!("{}m", seconds / 60)
+    } else {
+        format!("{seconds}s")
     }
 }
 
@@ -131,6 +257,10 @@ struct TokenRecord {
     client_id: String,
     #[serde(rename = "expiresAt", default)]
     expires_at: Option<u64>,
+    #[serde(rename = "issuedAt", default)]
+    issued_at: Option<u64>,
+    #[serde(default)]
+    duration: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -236,7 +366,10 @@ impl AuthStore {
             Uuid::new_v4().simple(),
             Uuid::new_v4().simple()
         );
-        let expires_in = 365_u64 * 24 * 60 * 60;
+        let expires_in = token_validity_seconds();
+        let issued_at = now_ms();
+        let expires_at = issued_at + expires_in * 1000;
+        let duration = format_token_duration(expires_in);
         {
             let mut data = self.data.write().await;
             data.tokens.insert(
@@ -244,7 +377,9 @@ impl AuthStore {
                 TokenRecord {
                     kind: "access".into(),
                     client_id: client_id.into(),
-                    expires_at: Some(now_ms() + expires_in * 1000),
+                    expires_at: Some(expires_at),
+                    issued_at: Some(issued_at),
+                    duration: Some(duration.clone()),
                 },
             );
             data.tokens.insert(
@@ -252,7 +387,9 @@ impl AuthStore {
                 TokenRecord {
                     kind: "refresh".into(),
                     client_id: client_id.into(),
-                    expires_at: None,
+                    expires_at: Some(expires_at),
+                    issued_at: Some(issued_at),
+                    duration: Some(duration),
                 },
             );
         }
@@ -266,6 +403,7 @@ impl AuthStore {
     }
 
     pub async fn active_tokens(&self) -> Vec<Value> {
+        let fallback_duration = token_validity_seconds() * 1000;
         let data = self.data.read().await;
         let mut tokens = data
             .tokens
@@ -278,7 +416,8 @@ impl AuthStore {
                 Some(json!({
                     "token": token,
                     "client_id": record.client_id,
-                    "issuedAt": expires_at.saturating_sub(365_u64 * 24 * 60 * 60 * 1000)
+                    "issuedAt": record.issued_at.unwrap_or_else(|| expires_at.saturating_sub(fallback_duration)),
+                    "duration": record.duration.clone().unwrap_or_else(|| format_token_duration(fallback_duration / 1000))
                 }))
             })
             .collect::<Vec<_>>();
@@ -291,7 +430,20 @@ impl AuthStore {
     }
 
     pub async fn revoke(&self, token: &str) -> bool {
-        let deleted = self.data.write().await.tokens.remove(token).is_some();
+        let deleted = {
+            let mut data = self.data.write().await;
+            let Some(client_id) = data
+                .tokens
+                .get(token)
+                .map(|record| record.client_id.clone())
+            else {
+                return false;
+            };
+            let before = data.tokens.len();
+            data.tokens
+                .retain(|_, record| record.client_id != client_id);
+            data.tokens.len() != before
+        };
         if deleted {
             let _ = self.persist().await;
         }
@@ -550,10 +702,16 @@ async fn token_exchange(
             .map(String::as_str)
             .unwrap_or_default();
         let client_id = {
-            let data = state.auth.data.read().await;
-            data.tokens
-                .get(refresh)
-                .and_then(|entry| (entry.kind == "refresh").then(|| entry.client_id.clone()))
+            let mut data = state.auth.data.write().await;
+            let client_id = data.tokens.get(refresh).and_then(|entry| {
+                (entry.kind == "refresh"
+                    && entry.expires_at.is_some_and(|expiry| expiry > now_ms()))
+                .then(|| entry.client_id.clone())
+            });
+            if client_id.is_some() {
+                data.tokens.remove(refresh);
+            }
+            client_id
         };
         let Some(client_id) = client_id else {
             return (
@@ -666,9 +824,24 @@ struct ReadSkillRequest {
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 struct RequestCapabilitiesRequest {
+    #[serde(default)]
+    tools: Vec<String>,
+    #[serde(default)]
     skills: Vec<String>,
     #[serde(default)]
     reason: Option<String>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+struct DescribePiToolRequest {
+    name: String,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+struct ExecutePiToolRequest {
+    name: String,
+    #[serde(default)]
+    arguments: Value,
 }
 
 fn default_skill_file() -> String {
@@ -676,19 +849,11 @@ fn default_skill_file() -> String {
 }
 
 fn resolve_safe_path(fs_root: &str, target: &str) -> Result<PathBuf, String> {
-    let root = expand_home(fs_root);
-    let root = fs::canonicalize(&root)
-        .map_err(|error| format!("Filesystem Root is unavailable: {error}"))?;
-    let raw = Path::new(target);
-    let candidate = if raw.is_absolute() {
-        path_clean::PathClean::clean(raw)
-    } else {
-        path_clean::PathClean::clean(&root.join(raw))
-    };
-    if !candidate.starts_with(&root) {
-        return Err("Access denied: Path is outside the configured file system root.".into());
-    }
-    Ok(candidate)
+    security::resolve_existing_path(&expand_home(fs_root), Path::new(target))
+}
+
+fn resolve_safe_write_path(fs_root: &str, target: &str) -> Result<PathBuf, String> {
+    security::resolve_write_path(&expand_home(fs_root), Path::new(target))
 }
 
 fn bounded_log_text(value: &str) -> String {
@@ -737,6 +902,7 @@ impl AuraMcpServer {
         if let Some(app) = &self.app {
             let entry = serde_json::json!({
                 "timestamp": crate::runtime::now_ms(),
+                "mcpMethod": "tools/call",
                 "tool": tool,
                 "params": params,
                 "result": result,
@@ -745,7 +911,9 @@ impl AuraMcpServer {
                 "duration": duration,
                 "http": crate::http_logger::current_http_context().unwrap_or(serde_json::Value::Null)
             });
-            crate::runtime::emit_mcp_log(app, entry);
+            if !crate::http_logger::defer_mcp_log(entry.clone()) {
+                crate::runtime::emit_mcp_log(app, entry);
+            }
         }
     }
 
@@ -778,110 +946,41 @@ impl AuraMcpServer {
         }
         if pi.is_none() {
             tool_router.disable_route("request_capabilities".to_string());
-        }
-
-        if let Some(bridge) = pi.as_ref() {
-            for pi_tool in bridge.visible_tools() {
-                let name = pi_tool.name.clone();
-                let description = format!(
-                    "{}\n\nSource: Pi {}{}",
-                    if pi_tool.description.is_empty() {
-                        "Pi tool."
-                    } else {
-                        &pi_tool.description
-                    },
-                    bridge.version,
-                    if pi_tool.uses_pi_default_model {
-                        " · May invoke the Pi default model."
-                    } else {
-                        " · Direct tool execution; no Pi agent turn."
+        } else if let Some(bridge) = pi.as_ref() {
+            if bridge.allowed_tool_count() == 0 {
+                tool_router.disable_route("describe_pi_tool".to_string());
+                tool_router.disable_route("execute_pi_tool".to_string());
+            }
+            let catalog = bridge
+                .tools
+                .iter()
+                .filter(|tool| bridge.allowed_tool(&tool.name).is_some())
+                .map(|tool| {
+                    let one_line = tool
+                        .description
+                        .split_whitespace()
+                        .collect::<Vec<_>>()
+                        .join(" ");
+                    let mut description = one_line.chars().take(120).collect::<String>();
+                    if one_line.chars().count() > 120 {
+                        description.push('…');
                     }
+                    if description.is_empty() {
+                        format!("- {}", tool.name)
+                    } else {
+                        format!("- {}: {}", tool.name, description)
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join("\n");
+            if let Some(route) = tool_router.map.get_mut("request_capabilities") {
+                route.attr.description = Some(
+                    format!(
+                        "Enable selected Pi tools or load Pi Skills on demand. Pi tools selected in Aura Settings are allowed but start inactive; successfully requested tools remain active for the current Pi session. Request only exact names that are missing from the current tool list.\n\nAllowed Pi tools:\n{}",
+                        if catalog.is_empty() { "(none)" } else { &catalog }
+                    )
+                    .into(),
                 );
-                let schema = pi_tool.parameters.as_object().cloned().unwrap_or_default();
-                let route_name = name.clone();
-                let attr = Tool::new(name, description, schema);
-                tool_router.add_route(ToolRoute::new_dyn(
-                    attr,
-                    move |context: ToolCallContext<'_, AuraMcpServer>| {
-                        let route_name = route_name.clone();
-                        Box::pin(async move {
-                            let started = std::time::Instant::now();
-                            let args = Value::Object(context.arguments.unwrap_or_default());
-                            let log_params = args.clone();
-                            let Some(bridge) = context.service.pi.clone() else {
-                                let error = "Pi bridge is unavailable.".to_string();
-                                context.service.log_execution(
-                                    &route_name,
-                                    log_params,
-                                    "Error",
-                                    None,
-                                    Some(error.clone()),
-                                    started.elapsed().as_millis() as u64,
-                                );
-                                return Ok(
-                                    CallToolResult::error(vec![ContentBlock::text(error)]).into()
-                                );
-                            };
-                            match bridge.execute(&route_name, args).await {
-                                Ok(result) => {
-                                    let is_error = result
-                                        .get("isError")
-                                        .and_then(Value::as_bool)
-                                        .unwrap_or(false);
-                                    let log_text = result
-                                        .get("logText")
-                                        .and_then(Value::as_str)
-                                        .map(bounded_log_text)
-                                        .unwrap_or_else(|| "(Non-text Pi result)".into());
-                                    context.service.log_execution(
-                                        &route_name,
-                                        log_params,
-                                        if is_error { "Error" } else { "Success" },
-                                        (!is_error).then(|| log_text.clone()),
-                                        is_error.then(|| log_text.clone()),
-                                        started.elapsed().as_millis() as u64,
-                                    );
-                                    let mut content = result
-                                        .get("content")
-                                        .and_then(Value::as_array)
-                                        .map(|items| {
-                                            items
-                                                .iter()
-                                                .filter_map(|item| {
-                                                    serde_json::from_value::<ContentBlock>(
-                                                        item.clone(),
-                                                    )
-                                                    .ok()
-                                                })
-                                                .collect::<Vec<_>>()
-                                        })
-                                        .unwrap_or_default();
-                                    if content.is_empty() {
-                                        content.push(ContentBlock::text(log_text));
-                                    }
-                                    let result = if is_error {
-                                        CallToolResult::error(content)
-                                    } else {
-                                        CallToolResult::success(content)
-                                    };
-                                    Ok(result.into())
-                                }
-                                Err(error) => {
-                                    context.service.log_execution(
-                                        &route_name,
-                                        log_params,
-                                        "Error",
-                                        None,
-                                        Some(error.clone()),
-                                        started.elapsed().as_millis() as u64,
-                                    );
-                                    Ok(CallToolResult::error(vec![ContentBlock::text(error)])
-                                        .into())
-                                }
-                            }
-                        })
-                    },
-                ));
             }
         }
 
@@ -898,6 +997,123 @@ impl AuraMcpServer {
             .get("fsRoot")
             .and_then(Value::as_str)
             .unwrap_or("~/")
+    }
+
+    fn environment_path(&self) -> Option<&str> {
+        configured_environment_path(&self.config)
+    }
+
+    fn pi_tool_schema(pi_tool: &crate::pi::PiTool) -> Value {
+        serde_json::json!({
+            "name": pi_tool.name,
+            "description": pi_tool.description,
+            "inputSchema": pi_tool.parameters,
+        })
+    }
+
+    fn append_pi_tool_schemas(
+        output: &mut Vec<String>,
+        pi: &PiBridge,
+        names: &[String],
+        label: &str,
+    ) {
+        for name in names {
+            if let Some(tool) = pi.allowed_tool(name) {
+                output.push(format!(
+                    "{label} Pi tool schema for {name}:\n{}",
+                    Self::pi_tool_schema(&tool)
+                ));
+            }
+        }
+    }
+
+    fn pi_tool_definition(bridge: &PiBridge, pi_tool: &crate::pi::PiTool) -> Tool {
+        let description = format!(
+            "{}\n\nSource: Pi {}{}",
+            if pi_tool.description.is_empty() {
+                "Pi tool."
+            } else {
+                &pi_tool.description
+            },
+            bridge.version,
+            if pi_tool.uses_pi_default_model {
+                " · May invoke the Pi default model."
+            } else {
+                " · Direct tool execution; no Pi agent turn."
+            }
+        );
+        let schema = pi_tool.parameters.as_object().cloned().unwrap_or_default();
+        Tool::new(pi_tool.name.clone(), description, schema)
+    }
+
+    async fn invoke_pi_tool(&self, name: &str, args: Value) -> CallToolResult {
+        let started = std::time::Instant::now();
+        let log_params = args.clone();
+        let Some(bridge) = self.pi.as_ref() else {
+            let error = "Pi bridge is unavailable.".to_string();
+            self.log_execution(
+                name,
+                log_params,
+                "Error",
+                None,
+                Some(error.clone()),
+                started.elapsed().as_millis() as u64,
+            );
+            return CallToolResult::error(vec![ContentBlock::text(error)]);
+        };
+
+        match bridge.execute(name, args).await {
+            Ok(result) => {
+                let is_error = result
+                    .get("isError")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false);
+                let log_text = result
+                    .get("logText")
+                    .and_then(Value::as_str)
+                    .map(bounded_log_text)
+                    .unwrap_or_else(|| "(Non-text Pi result)".into());
+                self.log_execution(
+                    name,
+                    log_params,
+                    if is_error { "Error" } else { "Success" },
+                    (!is_error).then(|| log_text.clone()),
+                    is_error.then(|| log_text.clone()),
+                    started.elapsed().as_millis() as u64,
+                );
+                let mut content = result
+                    .get("content")
+                    .and_then(Value::as_array)
+                    .map(|items| {
+                        items
+                            .iter()
+                            .filter_map(|item| {
+                                serde_json::from_value::<ContentBlock>(item.clone()).ok()
+                            })
+                            .collect::<Vec<_>>()
+                    })
+                    .unwrap_or_default();
+                if content.is_empty() {
+                    content.push(ContentBlock::text(log_text));
+                }
+                if is_error {
+                    CallToolResult::error(content)
+                } else {
+                    CallToolResult::success(content)
+                }
+            }
+            Err(error) => {
+                self.log_execution(
+                    name,
+                    log_params,
+                    "Error",
+                    None,
+                    Some(error.clone()),
+                    started.elapsed().as_millis() as u64,
+                );
+                CallToolResult::error(vec![ContentBlock::text(error)])
+            }
+        }
     }
 }
 
@@ -947,18 +1163,10 @@ impl AuraMcpServer {
             "bytes": request.content.len()
         });
         let result = (|| -> Result<String, String> {
-            let path = resolve_safe_path(self.fs_root(), &request.path)?;
+            let path = resolve_safe_write_path(self.fs_root(), &request.path)?;
             if let Some(parent) = path.parent() {
                 fs::create_dir_all(parent).map_err(|error| error.to_string())?;
-                if let Ok(real_parent) = fs::canonicalize(parent) {
-                    let real_root = fs::canonicalize(expand_home(self.fs_root()))
-                        .map_err(|_| "Filesystem Root is unavailable.".to_string())?;
-                    if !real_parent.starts_with(real_root) {
-                        return Err(
-                            "Access denied: resolved parent is outside Filesystem Root.".into()
-                        );
-                    }
-                }
+                security::resolve_existing_path(&expand_home(self.fs_root()), parent)?;
             }
             fs::write(&path, request.content.as_bytes()).map_err(|error| error.to_string())?;
             Ok(format!("Successfully wrote to {}", request.path))
@@ -994,11 +1202,6 @@ impl AuraMcpServer {
     async fn execute_shell(&self, Parameters(request): Parameters<ExecuteShellRequest>) -> String {
         let started = std::time::Instant::now();
         let command = request.command.trim().to_string();
-        let base = command
-            .split_whitespace()
-            .next()
-            .unwrap_or_default()
-            .to_string();
         let policy = self
             .config
             .get("shellPolicy")
@@ -1010,34 +1213,23 @@ impl AuraMcpServer {
             .config
             .get("shellAllowlist")
             .and_then(Value::as_array)
-            .cloned()
-            .unwrap_or_default();
+            .into_iter()
+            .flatten()
+            .filter_map(Value::as_str)
+            .map(ToOwned::to_owned)
+            .collect::<HashSet<_>>();
         let denylist = self
             .config
             .get("shellDenylist")
             .and_then(Value::as_array)
-            .cloned()
-            .unwrap_or_default();
-        let contains = |values: &[Value], value: &str| {
-            values
-                .iter()
-                .filter_map(Value::as_str)
-                .any(|item| item == value)
-        };
-        if policy == "allowlist" && !contains(&allowlist, &base) {
-            let error = format!("Command '{base}' is not in the allowlist.");
-            self.log_execution(
-                "execute_shell",
-                params,
-                "Error",
-                None,
-                Some(error.clone()),
-                started.elapsed().as_millis() as u64,
-            );
-            return format!("Error: {error}");
-        }
-        if policy == "denylist" && contains(&denylist, &base) {
-            let error = format!("Command '{base}' is explicitly blocked by denylist.");
+            .into_iter()
+            .flatten()
+            .filter_map(Value::as_str)
+            .map(ToOwned::to_owned)
+            .collect::<HashSet<_>>();
+        if let Err(error) =
+            security::validate_shell_policy(&command, &policy, &allowlist, &denylist)
+        {
             self.log_execution(
                 "execute_shell",
                 params,
@@ -1053,12 +1245,21 @@ impl AuraMcpServer {
         let mut process = {
             let mut process = Command::new("cmd.exe");
             process.args(["/C", &command]);
+            if let Some(path) = self.environment_path() {
+                process.env("PATH", path);
+            }
             process
         };
         #[cfg(not(target_os = "windows"))]
         let mut process = {
             let mut process = Command::new("/bin/sh");
-            process.args(["-lc", &command]);
+            let shell_command = if let Some(path) = self.environment_path() {
+                process.env("AURA_RUNTIME_PATH", path);
+                format!("export PATH=\"$AURA_RUNTIME_PATH\"; unset AURA_RUNTIME_PATH; {command}")
+            } else {
+                command.clone()
+            };
+            process.args(["-lc", &shell_command]);
             process
         };
         process.current_dir(home_dir());
@@ -1208,15 +1409,90 @@ impl AuraMcpServer {
         }
     }
 
-    #[tool(description = "Load selected Pi Skills into the current context on demand.")]
+    #[tool(
+        description = "Describe one active Pi tool, including its original input schema. The tool must be selected in Aura Settings and activated with request_capabilities first.",
+        annotations(
+            title = "Describe active Pi tool",
+            read_only_hint = true,
+            destructive_hint = false,
+            idempotent_hint = true,
+            open_world_hint = false
+        )
+    )]
+    async fn describe_pi_tool(
+        &self,
+        Parameters(request): Parameters<DescribePiToolRequest>,
+    ) -> String {
+        let name = request.name.trim();
+        let Some(pi) = self.pi.as_ref() else {
+            return "Error: Pi bridge is unavailable.".into();
+        };
+        let Some(tool) = pi.allowed_tool(name) else {
+            return format!("Error: Pi tool '{name}' is not enabled in Aura Settings.");
+        };
+        match pi.active_tool_names().await {
+            Ok(active) if active.contains(name) => serde_json::json!({
+                "name": tool.name,
+                "description": tool.description,
+                "inputSchema": tool.parameters,
+                "source": format!("Pi {}", pi.version),
+            })
+            .to_string(),
+            Ok(_) => {
+                format!("Error: Pi tool '{name}' is inactive. Call request_capabilities first.")
+            }
+            Err(error) => format!("Error: Unable to read active Pi tools: {error}"),
+        }
+    }
+
+    #[tool(
+        description = "Execute one active Pi tool through Aura's ChatGPT compatibility path. The tool must be selected in Aura Settings and activated with request_capabilities first. Aura still enforces the original Pi tool, Filesystem Root, and Shell Policy checks. Use describe_pi_tool to inspect its input schema."
+    )]
+    async fn execute_pi_tool(
+        &self,
+        Parameters(request): Parameters<ExecutePiToolRequest>,
+    ) -> CallToolResult {
+        let name = request.name.trim();
+        let arguments = if request.arguments.is_null() {
+            Value::Object(Default::default())
+        } else if request.arguments.is_object() {
+            request.arguments
+        } else {
+            return CallToolResult::error(vec![ContentBlock::text(
+                "Pi tool arguments must be a JSON object.",
+            )]);
+        };
+        let Some(pi) = self.pi.as_ref() else {
+            return CallToolResult::error(vec![ContentBlock::text("Pi bridge is unavailable.")]);
+        };
+        match pi.active_tool_names().await {
+            Ok(active) if active.contains(name) => self.invoke_pi_tool(name, arguments).await,
+            Ok(_) if pi.allowed_tool(name).is_some() => {
+                CallToolResult::error(vec![ContentBlock::text(format!(
+                    "Pi tool '{name}' is inactive. Call request_capabilities first."
+                ))])
+            }
+            Ok(_) => CallToolResult::error(vec![ContentBlock::text(format!(
+                "Pi tool '{name}' is not enabled in Aura Settings."
+            ))]),
+            Err(error) => CallToolResult::error(vec![ContentBlock::text(format!(
+                "Unable to read active Pi tools: {error}"
+            ))]),
+        }
+    }
+
+    #[tool(
+        description = "Enable selected Pi tools or load Pi Skills on demand. Tools must be allowed in Aura Settings."
+    )]
     async fn request_capabilities(
         &self,
         Parameters(request): Parameters<RequestCapabilitiesRequest>,
     ) -> String {
         let started = std::time::Instant::now();
+        let tools = request.tools.into_iter().take(16).collect::<Vec<_>>();
         let skills = request.skills.into_iter().take(16).collect::<Vec<_>>();
         let reason = request.reason.filter(|value| !value.trim().is_empty());
-        let params = serde_json::json!({"skills": skills, "reason": reason});
+        let params = serde_json::json!({"tools": tools, "skills": skills, "reason": reason});
         let Some(pi) = self.pi.as_ref() else {
             let error = "Pi bridge is unavailable.".to_string();
             self.log_execution(
@@ -1229,9 +1505,51 @@ impl AuraMcpServer {
             );
             return format!("Error: {error}");
         };
+
+        let activation = match pi.enable_tools(&tools).await {
+            Ok(activation) => activation,
+            Err(error) => {
+                self.log_execution(
+                    "request_capabilities",
+                    params,
+                    "Error",
+                    None,
+                    Some(error.clone()),
+                    started.elapsed().as_millis() as u64,
+                );
+                return format!("Error: {error}");
+            }
+        };
+
         let mut output = Vec::new();
         if let Some(reason) = reason.as_ref() {
             output.push(format!("Reason: {reason}"));
+        }
+        if !activation.enabled.is_empty() {
+            output.push(format!(
+                "Enabled Pi tools: {}",
+                activation.enabled.join(", ")
+            ));
+            Self::append_pi_tool_schemas(&mut output, pi, &activation.enabled, "Activated");
+        }
+        if !activation.already_active.is_empty() {
+            output.push(format!(
+                "Already active: {}",
+                activation.already_active.join(", ")
+            ));
+            Self::append_pi_tool_schemas(&mut output, pi, &activation.already_active, "Active");
+        }
+        if !activation.blocked.is_empty() {
+            output.push(format!(
+                "Blocked by Aura Settings: {}",
+                activation.blocked.join(", ")
+            ));
+        }
+        if !activation.unknown.is_empty() {
+            output.push(format!(
+                "Unknown Pi tools: {}",
+                activation.unknown.join(", ")
+            ));
         }
         for name in &skills {
             match pi.read_skill(name, "SKILL.md") {
@@ -1242,7 +1560,7 @@ impl AuraMcpServer {
             }
         }
         let output = if output.is_empty() {
-            "No Skills were loaded.".into()
+            "No capability changes were required.".into()
         } else {
             output.join("\n\n")
         };
@@ -1260,6 +1578,108 @@ impl AuraMcpServer {
 
 #[tool_handler(router = self.tool_router)]
 impl ServerHandler for AuraMcpServer {
+    async fn call_tool(
+        &self,
+        request: rmcp::model::CallToolRequestParams,
+        context: rmcp::service::RequestContext<rmcp::RoleServer>,
+    ) -> Result<rmcp::model::CallToolResponse, rmcp::ErrorData> {
+        let collector = context
+            .extensions
+            .get::<axum::http::request::Parts>()
+            .and_then(|parts| {
+                parts
+                    .extensions
+                    .get::<crate::http_logger::McpLogCollector>()
+            })
+            .cloned();
+
+        crate::http_logger::scope_mcp_log_collector(collector, async move {
+            let name = request.name.to_string();
+            if self.tool_router.has_route(&name) {
+                let before = if name == "request_capabilities" {
+                    match self.pi.as_ref() {
+                        Some(pi) => pi.active_tool_names().await.ok(),
+                        None => None,
+                    }
+                } else {
+                    None
+                };
+                let peer = context.peer.clone();
+                let result = self
+                    .tool_router
+                    .call(ToolCallContext::new(self, request, context))
+                    .await?;
+
+                if let (Some(before), Some(pi)) = (before, self.pi.as_ref()) {
+                    if let Ok(after) = pi.active_tool_names().await {
+                        if after != before {
+                            if let Err(error) = peer.notify_tool_list_changed().await {
+                                if let Some(app) = &self.app {
+                                    emit_runtime(
+                                        app,
+                                        "warn",
+                                        &format!(
+                                            "Unable to notify MCP client of Pi tool changes: {error}"
+                                        ),
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
+                return Ok(result);
+            }
+
+            if let Some(pi) = self.pi.as_ref() {
+                if pi.allowed_tool(&name).is_some() {
+                    let args = Value::Object(request.arguments.unwrap_or_default());
+                    return Ok(self.invoke_pi_tool(&name, args).await.into());
+                }
+            }
+
+            Err(rmcp::ErrorData::invalid_params("tool not found", None))
+        })
+        .await
+    }
+
+    async fn list_tools(
+        &self,
+        _request: Option<rmcp::model::PaginatedRequestParams>,
+        context: rmcp::service::RequestContext<rmcp::RoleServer>,
+    ) -> Result<rmcp::model::ListToolsResult, rmcp::ErrorData> {
+        let supports_cache_hints = context
+            .protocol_version()
+            .is_some_and(|version| version >= rmcp::model::ProtocolVersion::V_2026_07_28);
+        let mut tools = self.tool_router.list_all();
+        if let Some(pi) = self.pi.as_ref() {
+            let active = pi.visible_tools().await.map_err(|error| {
+                rmcp::ErrorData::internal_error(
+                    format!("Unable to read active Pi tools: {error}"),
+                    None,
+                )
+            })?;
+            tools.extend(active.iter().map(|tool| Self::pi_tool_definition(pi, tool)));
+        }
+        tools.sort_by(|a, b| a.name.cmp(&b.name));
+        Ok(rmcp::model::ListToolsResult {
+            result_type: Some(rmcp::model::ResultType::COMPLETE),
+            tools,
+            meta: None,
+            next_cursor: None,
+            ttl_ms: supports_cache_hints.then_some(0),
+            cache_scope: supports_cache_hints.then_some(rmcp::model::CacheScope::Public),
+        })
+    }
+
+    fn get_tool(&self, name: &str) -> Option<Tool> {
+        if let Some(tool) = self.tool_router.get(name) {
+            return Some(tool.clone());
+        }
+        let pi = self.pi.as_ref()?;
+        pi.allowed_tool(name)
+            .map(|tool| Self::pi_tool_definition(pi, &tool))
+    }
+
     fn get_info(&self) -> ServerInfo {
         let instructions = self
             .config
@@ -1267,9 +1687,14 @@ impl ServerHandler for AuraMcpServer {
             .and_then(Value::as_str)
             .unwrap_or_default()
             .to_string();
-        ServerInfo::new(ServerCapabilities::builder().enable_tools().build())
-            .with_server_info(Implementation::new("Aura-MCP", "1.0.1"))
-            .with_instructions(instructions)
+        ServerInfo::new(
+            ServerCapabilities::builder()
+                .enable_tools()
+                .enable_tool_list_changed()
+                .build(),
+        )
+        .with_server_info(Implementation::new("Aura-MCP", "1.0.1"))
+        .with_instructions(instructions)
     }
 }
 
@@ -1287,6 +1712,14 @@ pub struct RuntimeManager {
     inner: Mutex<RuntimeInner>,
     pi_init: Mutex<()>,
     pub auth: Arc<AuthStore>,
+}
+
+fn loopback_listen_host(host: &str) -> bool {
+    host.eq_ignore_ascii_case("localhost")
+        || host == "[::1]"
+        || host
+            .parse::<std::net::IpAddr>()
+            .is_ok_and(|ip| ip.is_loopback())
 }
 
 fn build_allowed_hosts(effective: &Value) -> Vec<String> {
@@ -1367,7 +1800,9 @@ impl RuntimeManager {
         }
 
         let result = async {
-            let effective = config::effective(&config::load(), None);
+            let mut stored_config = config::load();
+            ensure_environment_path(app, &mut stored_config).await;
+            let effective = config::effective(&stored_config, None);
             let host = effective
                 .get("listenHost")
                 .and_then(Value::as_str)
@@ -1387,6 +1822,12 @@ impl RuntimeManager {
                 .and_then(Value::as_str)
                 .unwrap_or("cloudflare-named")
                 .to_string();
+            if mode == "openai" && !loopback_listen_host(&host) {
+                return Err(
+                    "OpenAI Secure Tunnel mode requires Aura MCP to listen on a loopback address."
+                        .into(),
+                );
+            }
 
             emit_runtime(
                 app,
@@ -1414,7 +1855,7 @@ impl RuntimeManager {
                     "info",
                     &format!(
                         "Pi bridge ready: {} tools, {} skills (Pi {}, Node {}).",
-                        bridge.visible_tools().len(),
+                        bridge.allowed_tool_count(),
                         bridge.skills.len(),
                         bridge.version,
                         bridge.node_version
@@ -1768,7 +2209,7 @@ fn executable_name(mode: &str) -> &'static str {
     }
 }
 
-fn locate_binary(mode: &str, configured: &str) -> Option<PathBuf> {
+fn locate_binary(mode: &str, configured: &str, environment_path: Option<&str>) -> Option<PathBuf> {
     if !configured.trim().is_empty() {
         let path = expand_home(configured);
         if is_executable(&path) {
@@ -1776,7 +2217,11 @@ fn locate_binary(mode: &str, configured: &str) -> Option<PathBuf> {
         }
     }
     let name = executable_name(mode);
-    let mut candidates = std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default())
+    let path_value = environment_path
+        .map(std::ffi::OsString::from)
+        .or_else(|| env::var_os("PATH"))
+        .unwrap_or_default();
+    let mut candidates = env::split_paths(&path_value)
         .map(|dir| dir.join(name))
         .collect::<Vec<_>>();
     #[cfg(target_os = "macos")]
@@ -1951,7 +2396,8 @@ async fn start_tunnel(app: &AppHandle, effective: &Value) -> Result<Option<Child
         .get("binaryPath")
         .and_then(Value::as_str)
         .unwrap_or_default();
-    let binary = locate_binary(mode, configured).ok_or_else(|| {
+    let environment_path = configured_environment_path(effective);
+    let binary = locate_binary(mode, configured, environment_path).ok_or_else(|| {
         format!(
             "{} executable not found. Configure Binary File Path in Network & Tunnel.",
             executable_name(mode)
@@ -1970,6 +2416,9 @@ async fn start_tunnel(app: &AppHandle, effective: &Value) -> Result<Option<Child
         .and_then(Value::as_str)
         .unwrap_or("/mcp");
     let mut command = Command::new(&binary);
+    if let Some(path) = environment_path {
+        command.env("PATH", path);
+    }
 
     match mode {
         "cloudflare-named" => {
@@ -2169,13 +2618,243 @@ mod tests {
         (status_code, res_headers, body_part)
     }
 
+    fn embedded_schema_from_output(output: &str, label: &str, name: &str) -> Value {
+        let marker = format!("{label} Pi tool schema for {name}:\n");
+        let json = output
+            .split_once(&marker)
+            .unwrap_or_else(|| panic!("missing embedded schema marker: {marker}"))
+            .1
+            .split("\n\n")
+            .next()
+            .expect("embedded schema JSON");
+        serde_json::from_str(json).expect("embedded schema must be complete JSON")
+    }
+
+    fn assert_embedded_schema_matches_registry(actual: &Value, expected: &crate::pi::PiTool) {
+        let object = actual
+            .as_object()
+            .expect("embedded schema must be a JSON object");
+        assert_eq!(
+            object.len(),
+            3,
+            "embedded schema must contain exactly name, description, and inputSchema"
+        );
+        assert_eq!(
+            actual.get("name"),
+            Some(&Value::String(expected.name.clone()))
+        );
+        assert_eq!(
+            actual.get("description"),
+            Some(&Value::String(expected.description.clone()))
+        );
+        assert_eq!(actual.get("inputSchema"), Some(&expected.parameters));
+    }
+
+    #[tokio::test]
+    #[ignore = "requires the user's local Pi installation and Aura Pi tool selection"]
+    async fn current_config_embedded_schema_and_compatibility_regression() {
+        let cfg = config::effective(&config::load(), None);
+        if cfg.get("piEnabled").and_then(Value::as_bool) != Some(true) {
+            return;
+        }
+        let bridge = Arc::new(
+            PiBridge::initialize(&cfg)
+                .await
+                .expect("Pi bridge should initialize"),
+        );
+        let allowed = ["grep", "find", "read", "ls"]
+            .into_iter()
+            .find_map(|name| bridge.allowed_tool(name))
+            .or_else(|| {
+                bridge
+                    .tools
+                    .iter()
+                    .find(|tool| bridge.allowed_tool(&tool.name).is_some())
+                    .cloned()
+            })
+            .expect("at least one Pi tool must be selected in Aura Settings");
+        let blocked = bridge
+            .tools
+            .iter()
+            .find(|tool| bridge.allowed_tool(&tool.name).is_none())
+            .map(|tool| tool.name.clone());
+        let server = AuraMcpServer::new(None, cfg.clone(), Some(bridge.clone()));
+
+        let inactive_result = server
+            .execute_pi_tool(Parameters(ExecutePiToolRequest {
+                name: allowed.name.clone(),
+                arguments: Value::Object(Default::default()),
+            }))
+            .await;
+        assert_eq!(inactive_result.is_error, Some(true));
+        assert!(
+            bridge
+                .active_tool_names()
+                .await
+                .expect("active tools after rejected execution")
+                .is_empty(),
+            "execute_pi_tool must not implicitly activate a tool"
+        );
+
+        let enabled = server
+            .request_capabilities(Parameters(RequestCapabilitiesRequest {
+                tools: vec![allowed.name.clone()],
+                skills: Vec::new(),
+                reason: Some("embedded schema regression".into()),
+            }))
+            .await;
+        assert!(enabled.contains(&format!("Enabled Pi tools: {}", allowed.name)));
+        let enabled_schema = embedded_schema_from_output(&enabled, "Activated", &allowed.name);
+        assert_embedded_schema_matches_registry(&enabled_schema, &allowed);
+
+        let already_active = server
+            .request_capabilities(Parameters(RequestCapabilitiesRequest {
+                tools: vec![allowed.name.clone()],
+                skills: Vec::new(),
+                reason: Some("already active schema recovery".into()),
+            }))
+            .await;
+        assert!(already_active.contains(&format!("Already active: {}", allowed.name)));
+        let active_schema = embedded_schema_from_output(&already_active, "Active", &allowed.name);
+        assert_embedded_schema_matches_registry(&active_schema, &allowed);
+
+        let unknown_name = "__aura_unknown_tool__";
+        let unknown = server
+            .request_capabilities(Parameters(RequestCapabilitiesRequest {
+                tools: vec![unknown_name.into()],
+                skills: Vec::new(),
+                reason: None,
+            }))
+            .await;
+        assert!(unknown.contains(&format!("Unknown Pi tools: {unknown_name}")));
+        assert!(!unknown.contains("Pi tool schema for"));
+
+        if let Some(blocked_name) = blocked {
+            let blocked = server
+                .request_capabilities(Parameters(RequestCapabilitiesRequest {
+                    tools: vec![blocked_name.clone()],
+                    skills: Vec::new(),
+                    reason: None,
+                }))
+                .await;
+            assert!(blocked.contains(&format!("Blocked by Aura Settings: {blocked_name}")));
+            assert!(!blocked.contains("Pi tool schema for"));
+
+            let blocked_execution = server
+                .execute_pi_tool(Parameters(ExecutePiToolRequest {
+                    name: blocked_name,
+                    arguments: Value::Object(Default::default()),
+                }))
+                .await;
+            assert_eq!(blocked_execution.is_error, Some(true));
+        }
+
+        if matches!(allowed.name.as_str(), "ls" | "find" | "grep" | "read") {
+            let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+            let manifest = manifest_dir.join("Cargo.toml");
+            let args = match allowed.name.as_str() {
+                "ls" => json!({"path": manifest_dir}),
+                "find" => json!({"pattern": "Cargo.toml", "path": manifest_dir}),
+                "grep" => json!({"pattern": "aura", "path": manifest}),
+                "read" => json!({"path": manifest, "offset": 1, "limit": 1}),
+                _ => unreachable!(),
+            };
+            let success = server
+                .execute_pi_tool(Parameters(ExecutePiToolRequest {
+                    name: allowed.name.clone(),
+                    arguments: args,
+                }))
+                .await;
+            assert_ne!(success.is_error, Some(true));
+        }
+
+        if bridge.allowed_tool("read").is_some() {
+            bridge
+                .enable_tools(&["read".into()])
+                .await
+                .expect("read should activate for filesystem authority test");
+            let filesystem_rejection = server
+                .execute_pi_tool(Parameters(ExecutePiToolRequest {
+                    name: "read".into(),
+                    arguments: json!({"path": "/private/etc/passwd", "offset": 1, "limit": 1}),
+                }))
+                .await;
+            assert_eq!(filesystem_rejection.is_error, Some(true));
+        }
+
+        if bridge.allowed_tool("bash").is_some() {
+            let mut shell_cfg = cfg;
+            if let Some(root) = shell_cfg.as_object_mut() {
+                root.insert("shellPolicy".into(), Value::String("allowlist".into()));
+                root.insert("shellAllowlist".into(), json!(["echo"]));
+            }
+            let shell_bridge = Arc::new(
+                PiBridge::initialize(&shell_cfg)
+                    .await
+                    .expect("shell policy Pi bridge should initialize"),
+            );
+            shell_bridge
+                .enable_tools(&["bash".into()])
+                .await
+                .expect("bash should activate for shell authority test");
+            let shell_server = AuraMcpServer::new(None, shell_cfg, Some(shell_bridge.clone()));
+            let shell_rejection = shell_server
+                .execute_pi_tool(Parameters(ExecutePiToolRequest {
+                    name: "bash".into(),
+                    arguments: json!({"command": "uname -a"}),
+                }))
+                .await;
+            assert_eq!(shell_rejection.is_error, Some(true));
+            shell_bridge.shutdown().await;
+        }
+        bridge.shutdown().await;
+    }
+
     #[test]
     fn legacy_admin_secret_fails_closed() {
-        assert!(verify_admin_secret(None, "anything"));
+        assert!(!verify_admin_secret(None, "anything"));
         assert!(!verify_admin_secret(
             Some("legacy-electron-safe-storage-blob"),
             "anything"
         ));
+    }
+
+    #[test]
+    fn token_validity_parser_honors_supported_units_and_bounds() {
+        assert_eq!(parse_token_validity_seconds("24h"), 24 * 60 * 60);
+        assert_eq!(parse_token_validity_seconds("7d"), 7 * 24 * 60 * 60);
+        assert_eq!(parse_token_validity_seconds("30m"), 30 * 60);
+        assert_eq!(parse_token_validity_seconds("1m"), 5 * 60);
+        assert_eq!(parse_token_validity_seconds("invalid"), 24 * 60 * 60);
+    }
+
+    #[tokio::test]
+    async fn revoking_access_revokes_refresh_tokens_for_client() {
+        let path = std::env::temp_dir().join(format!("aura-auth-test-{}.json", Uuid::new_v4()));
+        let store = AuthStore::load_from(path.clone());
+        let issued = store
+            .issue_tokens("test-client")
+            .await
+            .expect("issue isolated tokens");
+        let access = issued["access_token"].as_str().expect("access token");
+        let refresh = issued["refresh_token"].as_str().expect("refresh token");
+
+        assert!(store.revoke(access).await);
+        let data = store.data.read().await;
+        assert!(!data.tokens.contains_key(access));
+        assert!(!data.tokens.contains_key(refresh));
+        drop(data);
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn openai_secure_tunnel_requires_loopback_listener() {
+        assert!(loopback_listen_host("127.0.0.1"));
+        assert!(loopback_listen_host("::1"));
+        assert!(loopback_listen_host("[::1]"));
+        assert!(loopback_listen_host("localhost"));
+        assert!(!loopback_listen_host("0.0.0.0"));
+        assert!(!loopback_listen_host("192.168.1.10"));
     }
 
     #[test]
@@ -2277,7 +2956,7 @@ mod tests {
             auth: auth_store.clone(),
             mode: "cloudflare-named".into(),
             resource_url: "https://t.xrsec.fun/test-mcp".into(),
-            admin_secret_marker: None,
+            admin_secret_marker: Some("test:test-password".into()),
         });
         let protected = Router::new()
             .nest_service(mcp_path, mcp_service)
@@ -2604,6 +3283,7 @@ pub fn emit_http_log(app: &tauri::AppHandle, entry: serde_json::Value) {
     let _ = tauri::Emitter::emit(app, "http-log", entry.clone());
     let formatted = serde_json::json!({
         "timestamp": entry.get("timestamp").cloned().unwrap_or(serde_json::json!(crate::runtime::now_ms())),
+        "mcpMethod": serde_json::Value::Null,
         "tool": serde_json::Value::Null,
         "params": serde_json::Value::Null,
         "result": if entry.get("status").and_then(|s| s.as_u64()).unwrap_or(200) >= 400 { "Error" } else { "Success" },

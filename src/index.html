@@ -1095,6 +1095,18 @@
     .http-status-4xx { background: rgba(251, 191, 36, 0.18); color: #fbbf24; }
     .http-status-5xx { background: rgba(248, 113, 113, 0.2); color: #f87171; }
 
+    .mcp-protocol-badge {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      font-weight: 700;
+      padding: 2px 6px;
+      border-radius: 4px;
+      letter-spacing: 0.04em;
+      color: var(--color-text-secondary);
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
     .log-search {
       flex: 1;
       min-width: 180px;
@@ -1468,11 +1480,11 @@
     <div style="display: flex; align-items: center; gap: 12px; position: relative; z-index: 10; -webkit-app-region: no-drag;">
       <!-- Navigation Tabs: Settings & Logs -->
       <div class="titlebar-nav" role="tablist">
-        <button type="button" class="titlebar-tab-btn is-active" id="tab-btn-settings" role="tab" aria-selected="true" aria-controls="surface-settings" onclick="switchMainTab('settings')">
+        <button type="button" class="titlebar-tab-btn is-active" id="tab-btn-settings" role="tab" aria-selected="true" aria-controls="surface-settings">
           <svg viewBox="0 0 24 24"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>
           Settings
         </button>
-        <button type="button" class="titlebar-tab-btn" id="tab-btn-logs" role="tab" aria-selected="false" aria-controls="surface-logs" onclick="switchMainTab('logs')">
+        <button type="button" class="titlebar-tab-btn" id="tab-btn-logs" role="tab" aria-selected="false" aria-controls="surface-logs">
           <svg viewBox="0 0 24 24"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"/></svg>
           Logs
         </button>
@@ -1660,7 +1672,7 @@
 
         <div class="setting-row is-action-row">
           <div></div>
-          <button type="button" class="btn btn-secondary" id="save-network-btn" onclick="saveNetworkSettings()">Save</button>
+          <button type="button" class="btn btn-secondary" id="save-network-btn">Save</button>
         </div>
       </div>
 
@@ -1683,7 +1695,7 @@
 
         <div class="setting-row is-action-row">
           <div></div>
-          <button type="button" class="btn btn-secondary" id="save-access-btn" onclick="saveAccessSettings()">Save</button>
+          <button type="button" class="btn btn-secondary" id="save-access-btn">Save</button>
         </div>
       </div>
 
@@ -1748,7 +1760,7 @@
           <div class="pi-capabilities-header">
             <div class="pi-capabilities-copy">
               <div class="setting-label">Use Pi Capabilities</div>
-              <div class="field-hint">Selected Pi tools are exposed and enabled immediately for each MCP connection. Disabled by default.</div>
+              <div class="field-hint">Selected Pi tools form the requestable allowlist. They start inactive and are enabled on demand with request_capabilities; active tools remain available for the current Pi session.</div>
             </div>
             <input type="checkbox" id="pi-enabled-toggle" class="pi-enabled-toggle" aria-label="Use Pi capabilities">
           </div>
@@ -1807,6 +1819,14 @@
         </div>
 
         <div class="setting-row">
+          <div>
+            <div class="setting-label">Environment PATH</div>
+            <div class="field-hint">Leave empty to detect PATH from the user shell when Aura starts; the detected value is saved automatically.</div>
+          </div>
+          <input type="text" id="environment-path" placeholder="Auto detect from user shell" spellcheck="false">
+        </div>
+
+        <div class="setting-row">
           <div class="setting-label">Shell Policy</div>
           <div class="input-combobox compact-combobox" id="shell-policy-combobox-wrapper">
             <input type="text" id="shell-policy-display" value="" readonly spellcheck="false" style="cursor: pointer;" role="combobox" aria-haspopup="listbox" aria-controls="shell-policy-dropdown-menu" aria-expanded="false" aria-label="Shell policy">
@@ -1838,7 +1858,7 @@
 
         <div class="setting-row is-action-row">
           <div></div>
-          <button type="button" class="btn btn-secondary" id="save-sandbox-btn" onclick="saveSandboxSettings()">Save</button>
+          <button type="button" class="btn btn-secondary" id="save-sandbox-btn">Save</button>
         </div>
       </div>
     </div>
@@ -1854,16 +1874,16 @@
       <!-- Log Type Switcher -->
       <div class="log-toolbar">
         <div class="segmented-control" role="tablist">
-          <button class="segmented-btn is-active" id="log-subtab-mcp" type="button" onclick="switchLogSubtab('mcp')">MCP Requests</button>
-          <button class="segmented-btn" id="log-subtab-tunnel" type="button" onclick="switchLogSubtab('tunnel')">Tunnel</button>
-          <button class="segmented-btn" id="log-subtab-runtime" type="button" onclick="switchLogSubtab('runtime')">App Runtime</button>
+          <button class="segmented-btn is-active" id="log-subtab-mcp" type="button">MCP Requests</button>
+          <button class="segmented-btn" id="log-subtab-tunnel" type="button">Tunnel</button>
+          <button class="segmented-btn" id="log-subtab-runtime" type="button">App Runtime</button>
         </div>
 
         <input id="log-search-input" class="log-search" type="search" placeholder="Search logs, tools, messages..." autocomplete="off">
 
         <div style="display: flex; align-items: center; gap: 6px;">
-          <button type="button" class="btn btn-secondary" id="export-safe-log-btn" style="height: 26px; font-size: 11px; padding: 0 10px;" onclick="exportSafeLog()">Copy</button>
-          <button type="button" class="btn btn-secondary" id="clear-all-logs-btn" style="height: 26px; font-size: 11px; padding: 0 10px;" onclick="clearAllLogs()">Clear</button>
+          <button type="button" class="btn btn-secondary" id="export-safe-log-btn" style="height: 26px; font-size: 11px; padding: 0 10px;">Copy</button>
+          <button type="button" class="btn btn-secondary" id="clear-all-logs-btn" style="height: 26px; font-size: 11px; padding: 0 10px;">Clear</button>
         </div>
       </div>
 

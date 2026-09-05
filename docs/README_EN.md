@@ -52,7 +52,7 @@ Files  Shell   Skills          Pi Tools
 - **Unified Management**: Connect, authorize, monitor logs, and configure tunnels in one clean UI.
 - **Fine-grained Security**: Strict Filesystem Root boundaries, Shell execution policies, DNS rebinding protection, and system keyring integration.
 - **Multiple Tunnel Modes**: Built-in support for Cloudflare Named Tunnel, Cloudflare Quick Tunnel, OpenAI Secure MCP Tunnel, and Custom Reverse Proxies.
-- **Pi Ecosystem Integration**: Directly leverages your local Node (>=22.19) and Pi Coding Agent installation to execute selected Pi Tools without calling `session.prompt()`.
+- **Pi Ecosystem Integration**: Uses your local Node (>=22.19) and Pi Coding Agent registry as an allowlisted, on-demand Tool source, while executing the original Pi Tool directly without calling `session.prompt()`.
 
 ## Core Capabilities
 
@@ -65,6 +65,40 @@ Files  Shell   Skills          Pi Tools
 | `execute_shell` | Execute shell commands strictly governed by Shell Policy |
 | `list_skills` | Discover and list available Skills |
 | `read_skill` | Read `SKILL.md` and referenced files inside a Skill directory |
+
+### Pi Tools / Skills
+
+When Pi is installed, Aura can reuse the Pi Tool and Skill registries and add capabilities to the current MCP session on demand:
+
+- Pi Tools selected in Aura Settings form the **requestable allowlist**. They do not all start active in the Pi session.
+- Pi Tools start inactive and are activated by exact name through `request_capabilities`.
+- Tool activation is **only-add / ensure-active** for the lifetime of the current session: successfully activated Tools remain active, and requesting a smaller set later does not remove them.
+- `request_capabilities` classifies Tool requests as `Enabled`, `Already active`, `Blocked`, or `Unknown`. `Enabled` and `Already active` include the Tool's real Pi-registry `name`, `description`, and complete `inputSchema`; `Blocked` and `Unknown` do not disclose a Schema.
+- Standard MCP clients that support dynamic Tool discovery receive `notifications/tools/list_changed` when the active set changes, then can call `tools/list` again and invoke the newly visible Pi Tool directly.
+- Some clients, including the currently tested ChatGPT connector behavior, do not hot-refresh direct Tool Schemas inside an existing connection. Aura therefore provides a compatibility path: `request_capabilities → embedded Pi Schema → execute_pi_tool → original Pi Tool`.
+- `execute_pi_tool` is not an activation mechanism. Execution still requires both Aura Settings allowlist membership and Pi active state, followed by the existing Filesystem Root and Shell Policy checks.
+- Aura invokes the original Pi Tool `execute()` implementation directly; it does not route Tool execution through Pi Agent `session.prompt()`.
+- Skills can also be loaded on demand with `request_capabilities`, or inspected through `list_skills` / `read_skill`.
+
+```text
+                   request_capabilities
+                          │
+                 Pi active state change
+                          │
+           ┌──────────────┴──────────────┐
+           │                             │
+     Standard MCP client             ChatGPT
+           │                             │
+  notifications/tools/list_changed      embedded Pi Schema
+           │                             │
+     second tools/list              execute_pi_tool
+           │                             │
+      direct Pi Tool                original Pi Tool
+           │                             │
+           └──────────────┬──────────────┘
+                          │
+        allowlist + active state + authority checks
+```
 
 ## Quick Start
 

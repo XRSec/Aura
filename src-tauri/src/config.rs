@@ -37,13 +37,15 @@ fn instruction_defaults() -> Value {
         "4. Transparent feedback: If a tool or command fails, carefully read the stderr or error message, and either attempt to fix the root cause or ask for clarification. Do not blindly retry failing commands."
     ].join("\n");
     let en_pi = [
-        "You are connected to the Aura-Pi local MCP hybrid capability engine. In addition to basic file and shell operations, you now have access to Pi Coding Agent's advanced AST-aware tools, LSP, cross-file refactoring, and complex workflows.",
+        "You are connected to the Aura-Pi local MCP hybrid capability engine. Aura exposes only the Pi tools that are currently active; tools selected in Aura Settings form the allowed capability catalog.",
         "Please strictly adhere to the following execution rules:",
-        "1. Direct tool usage: All Pi Tools selected in Aura Settings have their schemas directly available in this context. You must call them directly; DO NOT call request_capabilities first.",
-        "2. On-demand discovery: request_capabilities is reserved only for activating special underlying skill sets on demand. To understand project conventions, use list_skills and read_skill to read relevant documentation first.",
-        "3. Semantic search first: For code exploration, prioritize semantic and AST-level tools (e.g., symbol_search, ast_grep_search, module_report) over fragile plain-text searches.",
-        "4. No inception / agent nesting: Aura only bridges local tool execution and will not invoke external Pi models or initiate secondary session.prompt() loops for you. You must drive the reasoning yourself.",
-        "5. Precise editing: When modifying code, use the `edit` or AST refactoring tools for targeted replacements to avoid overwriting entire large files. Use lsp_diagnostics to catch errors before building."
+        "1. Dynamic capability activation: If a required Pi tool is missing from the current tool list, call request_capabilities with its exact name from the allowed-tool catalog in that tool's description. Do not guess names or request wildcards.",
+        "2. ChatGPT compatibility: request_capabilities returns the original input schema for newly enabled and already-active Pi tools. If an activated tool does not appear as a direct Tool Schema, use that embedded schema with execute_pi_tool. describe_pi_tool remains an optional read-only helper for clients that support it. Never use this compatibility path for an inactive or unlisted tool.",
+        "3. Monotonic session state: Successfully requested Pi tools are added to the current active set and remain active for the lifetime of the current Pi session. Do not re-request a tool that is already available.",
+        "4. Skills on demand: request_capabilities can also load selected Skills into the current context. Use list_skills/read_skill when you need to inspect Skill documentation directly.",
+        "5. Semantic search first: For code exploration, prioritize semantic and AST-level tools (e.g., symbol_search, ast_grep_search, module_report) over fragile plain-text searches.",
+        "6. No inception / agent nesting: Aura only bridges local tool execution and will not invoke external Pi models or initiate secondary session.prompt() loops for you. You must drive the reasoning yourself.",
+        "7. Precise editing: When modifying code, use the `edit` or AST refactoring tools for targeted replacements to avoid overwriting entire large files. Use lsp_diagnostics to catch errors before building."
     ].join("\n");
     let zh_basic = [
         "你已连接 Aura 本地 MCP 服务器。这为你提供了直接操作本地宿主机文件系统、执行 Shell 命令、以及访问本地技能字典（Skills）的能力。",
@@ -54,18 +56,53 @@ fn instruction_defaults() -> Value {
         "4. 透明反馈：如果遇到命令执行失败或文件不存在，请仔细阅读返回的 stderr 或错误信息，并根据错误提示尝试修正或向我确认，不要盲目重试相同的错误操作。"
     ].join("\n");
     let zh_pi = [
-        "你已完全接入 Aura-Pi 本地 MCP 混合能力引擎。除了基础的文件与终端操作外，你现在拥有了 Pi Coding Agent 的高级 AST 感知、语言服务器 (LSP)、跨文件重构及复杂工作流委派能力。",
+        "你已接入 Aura-Pi 本地 MCP 混合能力引擎。Aura 只向当前上下文暴露已经激活的 Pi 工具；Aura 设置中勾选的 Pi Tools 构成允许申请的能力目录。",
         "请严格遵守以下执行规范：",
-        "1. 直接调用可用工具：所有在 Aura 设置中勾选的 Pi Tools，其 Schema 已在当前上下文中直接可用。你可以直接调用它们，不需要（也不应该）先调用 request_capabilities。",
-        "2. 按需发现与加载：request_capabilities 工具仅保留用于按需激活特殊的底层技能组合。如需深入理解某个项目的代码库规约，请先使用 list_skills / read_skill 阅读相应的技能说明文档。",
-        "3. 语义搜索优先：进行代码搜索时，优先使用语义和 AST 级工具（如 symbol_search, ast_grep_search, module_report 等）来替代脆弱的纯文本搜索。",
-        "4. 禁止循环套娃：Aura 仅负责本地工具的执行桥接，不会替你调用外部的 Pi 模型或发起次级 session.prompt() 会话。你必须自己完成思考并决策，不能试图通过触发 Pi 默认模型工具把任务外包出去。",
-        "5. 精准编辑：当需要修改代码时，优先使用 edit 或 AST 重构工具进行局部精准替换，避免每次修改都覆写整个大文件。在遇到错误时，借助 lsp_diagnostics 在构建前拦截问题。"
+        "1. 动态申请能力：如果任务需要的 Pi 工具没有出现在当前工具列表中，请根据 request_capabilities 描述里的允许工具目录，使用准确工具名申请。不要猜测工具名，也不要使用通配符。",
+        "2. ChatGPT 兼容路径：request_capabilities 会为新激活及已激活的 Pi 工具返回原始输入 Schema。若 direct Tool Schema 仍未出现，请使用该内嵌 Schema 构造 execute_pi_tool 参数；describe_pi_tool 仅作为支持它的客户端可选只读辅助。不得通过兼容路径执行未激活或未勾选的工具。",
+        "3. 会话内只增不减：成功申请的 Pi 工具会加入当前 active 集，并在当前 Pi 会话生命周期内持续可用。已经可用的工具不要重复申请。",
+        "4. Skill 按需加载：request_capabilities 也可以把指定 Skill 加载进当前上下文；如需直接查看 Skill 文档，可使用 list_skills / read_skill。",
+        "5. 语义搜索优先：进行代码搜索时，优先使用语义和 AST 级工具（如 symbol_search, ast_grep_search, module_report 等）来替代脆弱的纯文本搜索。",
+        "6. 禁止循环套娃：Aura 仅负责本地工具执行桥接，不会替你调用外部 Pi 模型或发起次级 session.prompt() 会话。你必须自己完成思考并决策。",
+        "7. 精准编辑：修改代码时优先使用 edit 或 AST 重构工具进行局部精准替换，避免覆写整个大文件；构建前优先使用 lsp_diagnostics 检查错误。"
     ].join("\n");
     json!({
         "en": { "basic": en_basic, "pi": en_pi },
         "zh-CN": { "basic": zh_basic, "pi": zh_pi }
     })
+}
+
+fn migrate_legacy_pi_instructions(config: &mut Value) {
+    let Some(current) = config.get("mcpInstructions").and_then(Value::as_str) else {
+        return;
+    };
+    let legacy_en = current.contains(
+        "All Pi Tools selected in Aura Settings have their schemas directly available in this context.",
+    ) && current.contains(
+        "request_capabilities is reserved only for activating special underlying skill sets on demand.",
+    );
+    let legacy_zh = current
+        .contains("所有在 Aura 设置中勾选的 Pi Tools，其 Schema 已在当前上下文中直接可用。")
+        && current.contains("request_capabilities 工具仅保留用于按需激活特殊的底层技能组合。");
+    if !legacy_en && !legacy_zh {
+        return;
+    }
+
+    let language = config
+        .get("language")
+        .and_then(Value::as_str)
+        .unwrap_or(if legacy_zh { "zh-CN" } else { "en" });
+    let defaults = instruction_defaults();
+    let replacement = defaults
+        .get(language)
+        .and_then(|value| value.get("pi"))
+        .and_then(Value::as_str)
+        .or_else(|| defaults.pointer("/en/pi").and_then(Value::as_str))
+        .unwrap_or_default()
+        .to_string();
+    if let Some(root) = config.as_object_mut() {
+        root.insert("mcpInstructions".into(), Value::String(replacement));
+    }
 }
 
 fn default_config() -> Value {
@@ -88,6 +125,7 @@ fn default_config() -> Value {
         "piTools": [],
         "piAllowModelTools": false,
         "fsRoot": "~/",
+        "environmentPath": "",
         "shellPolicy": "unrestricted",
         "shellAllowlist": [],
         "shellDenylist": [],
@@ -131,6 +169,7 @@ pub fn load() -> Value {
         .unwrap_or_else(|| defaults.clone());
     let before = config.clone();
     merge_missing(&mut config, &defaults);
+    migrate_legacy_pi_instructions(&mut config);
     if !existed || config != before {
         let _ = write(&config);
     }
@@ -195,7 +234,7 @@ pub fn update(mut config: Value, payload: &Value) -> Value {
     let requested_mode = payload.get("tunnelMode").and_then(Value::as_str);
     let mode = provider_mode(&config, requested_mode);
 
-    const GLOBAL_KEYS: [&str; 15] = [
+    const GLOBAL_KEYS: [&str; 16] = [
         "tunnelMode",
         "autoConnect",
         "debugMode",
@@ -209,6 +248,7 @@ pub fn update(mut config: Value, payload: &Value) -> Value {
         "piTools",
         "piAllowModelTools",
         "fsRoot",
+        "environmentPath",
         "shellPolicy",
         "tokenValidity",
     ];
@@ -282,14 +322,21 @@ mod tests {
     use super::*;
 
     #[test]
-    fn update_persists_pi_binary_path() {
+    fn update_persists_runtime_paths() {
         let updated = update(
             default_config(),
-            &json!({"piBinaryPath": "/tmp/custom-pi/bin/pi"}),
+            &json!({
+                "piBinaryPath": "/tmp/custom-pi/bin/pi",
+                "environmentPath": "/usr/local/bin:/usr/bin:/bin"
+            }),
         );
         assert_eq!(
             updated.get("piBinaryPath").and_then(Value::as_str),
             Some("/tmp/custom-pi/bin/pi")
+        );
+        assert_eq!(
+            updated.get("environmentPath").and_then(Value::as_str),
+            Some("/usr/local/bin:/usr/bin:/bin")
         );
     }
 }

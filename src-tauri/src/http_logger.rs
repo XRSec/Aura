@@ -5,7 +5,10 @@ use axum::{
     response::Response,
 };
 use serde_json::{json, Map, Value};
-use std::time::Instant;
+use std::{
+    sync::{Arc, Mutex},
+    time::Instant,
+};
 use tauri::AppHandle;
 use uuid::Uuid;
 
@@ -21,8 +24,25 @@ struct HttpRequestContext {
     headers: Option<Value>,
 }
 
+#[derive(Clone, Default)]
+pub struct McpLogCollector(Arc<Mutex<Vec<Value>>>);
+
+impl McpLogCollector {
+    fn push(&self, entry: Value) -> bool {
+        self.0.lock().map(|mut logs| logs.push(entry)).is_ok()
+    }
+
+    fn drain(&self) -> Vec<Value> {
+        self.0
+            .lock()
+            .map(|mut logs| std::mem::take(&mut *logs))
+            .unwrap_or_default()
+    }
+}
+
 tokio::task_local! {
     static HTTP_REQUEST_CONTEXT: HttpRequestContext;
+    static MCP_LOG_COLLECTOR: McpLogCollector;
 }
 
 fn sensitive_header(name: &str) -> bool {
@@ -87,9 +107,26 @@ pub fn current_http_context() -> Option<Value> {
         .ok()
 }
 
+pub fn defer_mcp_log(entry: Value) -> bool {
+    MCP_LOG_COLLECTOR
+        .try_with(|collector| collector.push(entry))
+        .unwrap_or(false)
+}
+
+pub async fn scope_mcp_log_collector<F>(collector: Option<McpLogCollector>, future: F) -> F::Output
+where
+    F: std::future::Future,
+{
+    if let Some(collector) = collector {
+        MCP_LOG_COLLECTOR.scope(collector, future).await
+    } else {
+        future.await
+    }
+}
+
 pub async fn log_http_request(
     State(app): State<Option<AppHandle>>,
-    request: Request<Body>,
+    mut request: Request<Body>,
     next: Next,
 ) -> Response {
     let started = Instant::now();
@@ -136,6 +173,8 @@ pub async fn log_http_request(
         .and_then(Value::as_bool)
         .unwrap_or(false);
     let headers = debug_mode.then(|| headers_for_log(request.headers()));
+    let mcp_logs = McpLogCollector::default();
+    request.extensions_mut().insert(mcp_logs.clone());
     let context = HttpRequestContext {
         method: method.clone(),
         url: url.clone(),
@@ -153,7 +192,7 @@ pub async fn log_http_request(
     let response_headers = debug_mode.then(|| headers_for_log(response.headers()));
 
     if let Some(app) = app {
-        let entry = json!({
+        let http_entry = json!({
             "timestamp": crate::runtime::now_ms(),
             "method": method,
             "url": url,
@@ -167,7 +206,23 @@ pub async fn log_http_request(
             "headers": headers,
             "responseHeaders": response_headers,
         });
-        crate::runtime::emit_http_log(&app, entry);
+        let pending_mcp = mcp_logs.drain();
+
+        if pending_mcp.is_empty() {
+            let is_key_auth = url.contains("/oauth/authorize")
+                || url.contains("/oauth/token")
+                || url.contains("/oauth/register");
+            if debug_mode || status >= 400 || is_key_auth {
+                crate::runtime::emit_http_log(&app, http_entry);
+            }
+        } else {
+            for mut entry in pending_mcp {
+                if let Some(object) = entry.as_object_mut() {
+                    object.insert("http".into(), http_entry.clone());
+                }
+                crate::runtime::emit_mcp_log(&app, entry);
+            }
+        }
     }
 
     response
@@ -212,5 +267,14 @@ mod tests {
                 assert_eq!(value["headers"]["content-type"], "application/json");
             })
             .await;
+    }
+    #[tokio::test]
+    async fn mcp_log_is_deferred_inside_collector_scope() {
+        let collector = McpLogCollector::default();
+        scope_mcp_log_collector(Some(collector.clone()), async {
+            assert!(defer_mcp_log(json!({"tool":"bash"})));
+        })
+        .await;
+        assert_eq!(collector.drain().len(), 1);
     }
 }

@@ -80,16 +80,42 @@ Aura 在本机启动高性能 Rust MCP Server，并可提供以下基础能力�
 
 ### Pi Tools / Skills
 
-如果本机安装了 Pi，Aura 可以复用 Pi 的能力注册表：
+如果本机安装了 Pi，Aura 可以复用 Pi 的 Tool / Skill 注册表，并按需把能力加入当前 MCP 会话：
 
-- 读取 Pi ResourceLoader 发现的 Skills。
-- 选择需要暴露给 MCP 的 Pi Tools。
-- MCP 会话连接后，已选择的 Pi Tools 可直接暴露其 Schema 并执行。
-- `request_capabilities` 主要用于按需加载 Pi Skills。
-- Aura 直接调用 Pi Tool 的 `execute()`，不会通过 Pi Agent 的 `session.prompt()` 执行。
+- Aura Settings 中选择的 Pi Tools 构成 **允许申请的 allowlist**，不会在 Pi session 启动时全部激活。
+- Pi Tools 默认从 inactive 状态开始；客户端通过 `request_capabilities` 按准确工具名申请需要的能力。
+- `request_capabilities` 对 Tool 的语义是 **only-add / ensure-active**：当前 session 内成功激活的 Tool 只增不减，不会因为后续请求较小集合而被移除。
+- Tool 申请结果区分 `Enabled`、`Already active`、`Blocked` 和 `Unknown`。`Enabled` 与 `Already active` 都会返回该 Tool 来自真实 Pi registry 的 `name`、`description` 和完整 `inputSchema`；`Blocked` / `Unknown` 不返回 Schema。
+- 对支持动态 Tool Schema 的标准 MCP 客户端，active set 变化后 Aura 会发送 `notifications/tools/list_changed`；客户端重新 `tools/list` 后可直接调用新增的 Pi Tool。
+- 部分客户端（当前已知包括 ChatGPT）不会在现有连接中热刷新 direct Tool Schema。Aura 为此提供兼容路径：`request_capabilities → embedded Pi Schema → execute_pi_tool → 原始 Pi Tool`。
+- `execute_pi_tool` 不是激活机制：Tool 必须同时满足 Aura Settings allowlist 与 Pi active state，之后仍继续执行 Filesystem Root、Shell Policy 等原有权限检查。
+- Aura 最终调用的是原始 Pi Tool 的 `execute()`，不会通过 Pi Agent 的 `session.prompt()` 间接调用模型。
 - 可能调用 Pi 默认模型的能力默认阻止，可在设置中单独控制。
+- Skills 可通过 `request_capabilities` 按需加载，也可以使用 `list_skills` / `read_skill` 查看。
 
-这使 Aura 不只是一个 Filesystem / Shell MCP Server，也可以成为 **Pi 本地工具生态与 ChatGPT 之间的能力桥**。
+当前动态能力模型：
+
+```text
+                   request_capabilities
+                          │
+                 Pi active state change
+                          │
+           ┌──────────────┴──────────────┐
+           │                             │
+     Standard MCP client             ChatGPT
+           │                             │
+  notifications/tools/list_changed      embedded Pi Schema
+           │                             │
+     second tools/list              execute_pi_tool
+           │                             │
+      direct Pi Tool                original Pi Tool
+           │                             │
+           └──────────────┬──────────────┘
+                          │
+        allowlist + active state + authority checks
+```
+
+这使 Aura 不只是一个 Filesystem / Shell MCP Server，也可以成为 **Pi 本地工具生态与 ChatGPT 之间的动态能力桥**。
 
 ## Tunnel / 连接方式
 
@@ -118,7 +144,7 @@ Aura 的目标不是“让 AI 无限制控制电脑”，而是让本地能力�
 - **Token 撤销**：可在 Aura 中查看活动 Token 并随时撤销。
 - **系统 Keyring 凭据存储**：管理密码通过操作系统安全凭据管理器（macOS Keychain / Windows Credential Manager / Linux
   Secret Service）保存。
-- **Pi Tool 选择**：只有在 Aura Settings 中选中的 Pi Tools 才会暴露。
+- **Pi Tool 双重门控**：Aura Settings 中选中的 Pi Tools 只进入可申请 allowlist；实际执行还要求该 Tool 已在当前 Pi session 中激活。
 - **本地日志**：MCP 调用、HTTP、Tunnel 和服务生命周期日志可在应用内查看。
 
 > [!IMPORTANT]
@@ -173,7 +199,7 @@ npm run dev
 2. 选择需要的 Tunnel 模式。
 3. 设置 Filesystem Root。
 4. 根据风险需求配置 Shell Policy。
-5. 如果需要 Pi 能力，启用 Pi 并选择允许暴露的 Pi Tools。
+5. 如果需要 Pi 能力，启用 Pi 并选择允许客户端按需申请的 Pi Tools。
 6. 点击 **Connect**。
 7. 将 Aura 显示的 MCP 地址添加到 ChatGPT 或其他 MCP 客户端。
 8. 客户端发起连接时，在浏览器中完成授权。

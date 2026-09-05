@@ -1,4 +1,4 @@
-use crate::config;
+use crate::{config, security};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::{
@@ -53,6 +53,14 @@ pub struct PiSkill {
     pub disable_model_invocation: bool,
 }
 
+#[derive(Debug, Default)]
+pub struct PiToolActivation {
+    pub enabled: Vec<String>,
+    pub already_active: Vec<String>,
+    pub blocked: Vec<String>,
+    pub unknown: Vec<String>,
+}
+
 fn empty_schema() -> Value {
     json!({"type":"object","properties":{}})
 }
@@ -70,7 +78,7 @@ pub struct PiBridge {
     pub node_version: String,
     pub tools: Arc<Vec<PiTool>>,
     pub skills: Arc<Vec<PiSkill>>,
-    active_tools: Arc<HashSet<String>>,
+    allowed_tools: Arc<HashSet<String>>,
     fs_root: PathBuf,
     shell_policy: String,
     shell_allowlist: Arc<HashSet<String>>,
@@ -97,6 +105,13 @@ fn expand_home(value: &str) -> PathBuf {
         return home_dir().join(rest);
     }
     PathBuf::from(value)
+}
+
+fn configured_environment_path(config: &Value) -> Option<&str> {
+    config
+        .get("environmentPath")
+        .and_then(Value::as_str)
+        .filter(|path| !path.trim().is_empty())
 }
 
 fn package_manifest(root: &Path) -> Option<Value> {
@@ -151,12 +166,13 @@ fn package_candidates() -> Vec<PathBuf> {
     roots
 }
 
-async fn global_npm_root() -> Option<PathBuf> {
-    let output = Command::new("npm")
-        .args(["root", "-g"])
-        .output()
-        .await
-        .ok()?;
+async fn global_npm_root(config: &Value) -> Option<PathBuf> {
+    let mut command = Command::new("npm");
+    command.args(["root", "-g"]);
+    if let Some(path) = configured_environment_path(config) {
+        command.env("PATH", path);
+    }
+    let output = command.output().await.ok()?;
     if !output.status.success() {
         return None;
     }
@@ -164,7 +180,7 @@ async fn global_npm_root() -> Option<PathBuf> {
     (!value.is_empty()).then(|| PathBuf::from(value))
 }
 
-fn node_candidates(package_root: &Path) -> Vec<PathBuf> {
+fn node_candidates(package_root: &Path, config: &Value) -> Vec<PathBuf> {
     let mut candidates = Vec::new();
     let node_name = if cfg!(target_os = "windows") {
         "node.exe"
@@ -185,9 +201,11 @@ fn node_candidates(package_root: &Path) -> Vec<PathBuf> {
                 .join(node_name),
         );
     }
-    candidates.extend(
-        env::split_paths(&env::var_os("PATH").unwrap_or_default()).map(|dir| dir.join(node_name)),
-    );
+    let path_value = configured_environment_path(config)
+        .map(std::ffi::OsString::from)
+        .or_else(|| env::var_os("PATH"))
+        .unwrap_or_default();
+    candidates.extend(env::split_paths(&path_value).map(|dir| dir.join(node_name)));
     let nvm = home_dir().join(".nvm/versions/node");
     if let Ok(entries) = fs::read_dir(nvm) {
         let mut versions = entries
@@ -265,7 +283,7 @@ async fn locate_pi(cfg: &Value) -> Result<PiLocation, String> {
         }
     } else {
         candidates.extend(package_candidates());
-        if let Some(npm_root) = global_npm_root().await {
+        if let Some(npm_root) = global_npm_root(cfg).await {
             for name in PI_PACKAGE_NAMES {
                 candidates.push(npm_root.join(name));
             }
@@ -301,7 +319,7 @@ async fn locate_pi(cfg: &Value) -> Result<PiLocation, String> {
         if !entry.is_file() {
             continue;
         }
-        for node in node_candidates(&root) {
+        for node in node_candidates(&root, cfg) {
             if let Some(node_version) = inspect_node(&node).await {
                 return Ok(PiLocation {
                     version: manifest
@@ -343,15 +361,18 @@ impl PiBridge {
         ))
         .map_err(|error| format!("Aura Filesystem Root is unavailable: {error}"))?;
         let worker = worker_path()?;
-        let mut child = Command::new(&location.node_path)
+        let mut command = Command::new(&location.node_path);
+        command
             .arg(worker)
             .current_dir(&fs_root)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
-            .kill_on_drop(true)
-            .spawn()
-            .map_err(|error| error.to_string())?;
+            .kill_on_drop(true);
+        if let Some(path) = configured_environment_path(cfg) {
+            command.env("PATH", path);
+        }
+        let mut child = command.spawn().map_err(|error| error.to_string())?;
         let stdin = child
             .stdin
             .take()
@@ -414,7 +435,7 @@ impl PiBridge {
             node_version: location.node_version.clone(),
             tools: Arc::new(Vec::new()),
             skills: Arc::new(Vec::new()),
-            active_tools: Arc::new(HashSet::new()),
+            allowed_tools: Arc::new(HashSet::new()),
             fs_root,
             shell_policy: cfg
                 .get("shellPolicy")
@@ -464,7 +485,7 @@ impl PiBridge {
             .collect::<Vec<_>>();
         skills.sort_by(|a, b| a.name.cmp(&b.name));
 
-        let active = tools
+        let allowed = tools
             .iter()
             .filter(|tool| {
                 configured.contains(&tool.name)
@@ -472,28 +493,32 @@ impl PiBridge {
             })
             .map(|tool| tool.name.clone())
             .collect::<HashSet<_>>();
-        temporary
-            .request(
-                "setActiveTools",
-                json!({"names": active.iter().collect::<Vec<_>>()}),
-            )
-            .await?;
 
         Ok(Self {
             tools: Arc::new(tools),
             skills: Arc::new(skills),
-            active_tools: Arc::new(active),
+            allowed_tools: Arc::new(allowed),
             ..temporary
         })
     }
 
     async fn request(&self, method: &str, params: Value) -> Result<Value, String> {
+        self.request_with_timeout(method, params, std::time::Duration::from_secs(120))
+            .await
+    }
+
+    async fn request_with_timeout(
+        &self,
+        method: &str,
+        params: Value,
+        timeout: std::time::Duration,
+    ) -> Result<Value, String> {
         let id = Uuid::new_v4().to_string();
         let (sender, receiver) = oneshot::channel();
         self.inner.pending.lock().await.insert(id.clone(), sender);
         let line = serde_json::to_string(&json!({
             "type": "request",
-            "id": id,
+            "id": id.clone(),
             "method": method,
             "params": params
         }))
@@ -506,22 +531,101 @@ impl PiBridge {
                 .map_err(|error| error.to_string())?;
             stdin.flush().await.map_err(|error| error.to_string())?;
         }
-        tokio::time::timeout(std::time::Duration::from_secs(120), receiver)
-            .await
-            .map_err(|_| format!("Pi worker request '{method}' timed out."))?
-            .map_err(|_| "Pi worker stopped before responding.".to_string())?
+        match tokio::time::timeout(timeout, receiver).await {
+            Ok(result) => result.map_err(|_| "Pi worker stopped before responding.".to_string())?,
+            Err(_) => {
+                self.inner.pending.lock().await.remove(&id);
+                Err(format!("Pi worker request '{method}' timed out."))
+            }
+        }
     }
 
-    pub fn visible_tools(&self) -> Vec<PiTool> {
-        self.tools
+    pub fn allowed_tool_count(&self) -> usize {
+        self.allowed_tools.len()
+    }
+
+    pub fn allowed_tool(&self, name: &str) -> Option<PiTool> {
+        if !self.allowed_tools.contains(name) {
+            return None;
+        }
+        self.tools.iter().find(|tool| tool.name == name).cloned()
+    }
+
+    pub async fn active_tool_names(&self) -> Result<HashSet<String>, String> {
+        let result = self.request("getActiveTools", json!({})).await?;
+        Ok(result
+            .get("active")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .filter_map(Value::as_str)
+            .filter(|name| self.allowed_tools.contains(*name))
+            .map(ToOwned::to_owned)
+            .collect())
+    }
+
+    pub async fn visible_tools(&self) -> Result<Vec<PiTool>, String> {
+        let active = self.active_tool_names().await?;
+        Ok(self
+            .tools
             .iter()
-            .filter(|tool| self.active_tools.contains(&tool.name))
+            .filter(|tool| active.contains(&tool.name))
             .cloned()
-            .collect()
+            .collect())
+    }
+
+    pub async fn enable_tools(
+        &self,
+        requested_names: &[String],
+    ) -> Result<PiToolActivation, String> {
+        let known = self
+            .tools
+            .iter()
+            .map(|tool| tool.name.as_str())
+            .collect::<HashSet<_>>();
+        let mut seen = HashSet::new();
+        let mut allowed = Vec::new();
+        let mut activation = PiToolActivation::default();
+
+        for raw_name in requested_names {
+            let name = raw_name.trim();
+            if name.is_empty() || !seen.insert(name.to_string()) {
+                continue;
+            }
+            if !known.contains(name) {
+                activation.unknown.push(name.to_string());
+            } else if !self.allowed_tools.contains(name) {
+                activation.blocked.push(name.to_string());
+            } else {
+                allowed.push(name.to_string());
+            }
+        }
+
+        if allowed.is_empty() {
+            return Ok(activation);
+        }
+
+        let result = self
+            .request("enableTools", json!({"names": allowed}))
+            .await?;
+        let strings = |key: &str| {
+            result
+                .get(key)
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+                .filter_map(Value::as_str)
+                .map(ToOwned::to_owned)
+                .collect::<Vec<_>>()
+        };
+        activation.enabled = strings("enabled");
+        activation.already_active = strings("alreadyActive");
+        activation.unknown.extend(strings("unknown"));
+        Ok(activation)
     }
 
     pub async fn execute(&self, name: &str, args: Value) -> Result<Value, String> {
-        if !self.active_tools.contains(name) {
+        if !self.allowed_tools.contains(name) {
             return Err(format!(
                 "Capability '{name}' is not enabled in Aura Settings."
             ));
@@ -534,16 +638,11 @@ impl PiBridge {
     fn validate_authority(&self, name: &str, args: &Value) -> Result<(), String> {
         if matches!(name, "read" | "edit" | "write" | "grep" | "find" | "ls") {
             if let Some(path) = args.get("path").and_then(Value::as_str) {
-                let raw = Path::new(path);
-                let candidate = if raw.is_absolute() {
-                    path_clean::PathClean::clean(raw)
+                let target = Path::new(path);
+                if name == "write" {
+                    security::resolve_write_path(&self.fs_root, target)?;
                 } else {
-                    path_clean::PathClean::clean(&self.fs_root.join(raw))
-                };
-                if !candidate.starts_with(&self.fs_root) {
-                    return Err(
-                        "Access denied: Pi tool path is outside Aura Filesystem Root.".into(),
-                    );
+                    security::resolve_existing_path(&self.fs_root, target)?;
                 }
             }
         }
@@ -552,17 +651,12 @@ impl PiBridge {
                 .get("command")
                 .and_then(Value::as_str)
                 .unwrap_or_default();
-            let base = command.split_whitespace().next().unwrap_or_default();
-            if self.shell_policy == "allowlist" && !self.shell_allowlist.contains(base) {
-                return Err(format!(
-                    "Command '{base}' is not in Aura's shell allowlist."
-                ));
-            }
-            if self.shell_policy == "denylist" && self.shell_denylist.contains(base) {
-                return Err(format!(
-                    "Command '{base}' is explicitly blocked by Aura's denylist."
-                ));
-            }
+            security::validate_shell_policy(
+                command,
+                &self.shell_policy,
+                &self.shell_allowlist,
+                &self.shell_denylist,
+            )?;
         }
         Ok(())
     }
@@ -596,7 +690,9 @@ impl PiBridge {
     }
 
     pub async fn shutdown(&self) {
-        let _ = self.request("shutdown", json!({})).await;
+        let _ = self
+            .request_with_timeout("shutdown", json!({}), std::time::Duration::from_secs(2))
+            .await;
         let mut child = self.inner.child.lock().await;
         if child.try_wait().ok().flatten().is_none() {
             let _ = child.kill().await;
@@ -649,6 +745,231 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn worker_binds_extensions_before_snapshot_and_emits_shutdown() {
+        let node_available = Command::new("node")
+            .arg("--version")
+            .output()
+            .await
+            .map(|output| output.status.success())
+            .unwrap_or(false);
+        if !node_available {
+            eprintln!("Skipping pi-worker lifecycle test because node is unavailable.");
+            return;
+        }
+
+        let temp_dir = env::temp_dir().join(format!("aura-pi-worker-test-{}", Uuid::new_v4()));
+        fs::create_dir_all(&temp_dir).expect("create pi-worker test directory");
+        let worker = temp_dir.join("pi-worker.cjs");
+        let sdk = temp_dir.join("fake-sdk.mjs");
+        fs::write(&worker, WORKER_SOURCE).expect("write pi-worker fixture");
+        fs::write(
+            &sdk,
+            r#"
+export const SessionManager = {
+  inMemory(cwd) { return { cwd }; }
+};
+
+export async function createAgentSession() {
+  const tools = new Map();
+  let active = [];
+  const session = {
+    async bindExtensions() {
+      tools.set('deferred_tool', {
+        name: 'deferred_tool',
+        description: 'registered during session_start',
+        parameters: { type: 'object', properties: {} }
+      });
+    },
+    getAllTools() {
+      return [...tools.values()].map(tool => ({
+        name: tool.name,
+        description: tool.description,
+        sourceInfo: { source: 'fixture' }
+      }));
+    },
+    getToolDefinition(name) { return tools.get(name); },
+    resourceLoader: { getSkills() { return { skills: [] }; } },
+    setActiveToolsByName(names) { active = [...names]; },
+    getActiveToolNames() { return [...active]; },
+    extensionRunner: {
+      hasHandlers(name) { return name === 'session_shutdown'; },
+      async emit(event) {
+        if (event.type === 'session_shutdown') {
+          process.stdout.write('FIXTURE_SESSION_SHUTDOWN\n');
+        }
+      }
+    },
+    dispose() {}
+  };
+  return { session };
+}
+"#,
+        )
+        .expect("write fake Pi SDK");
+
+        let mut child = Command::new("node")
+            .arg(&worker)
+            .current_dir(&temp_dir)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .kill_on_drop(true)
+            .spawn()
+            .expect("spawn pi-worker lifecycle fixture");
+        let mut stdin = child.stdin.take().expect("worker stdin");
+        let stdout = child.stdout.take().expect("worker stdout");
+        let mut lines = BufReader::new(stdout).lines();
+
+        let init = json!({
+            "type": "request",
+            "id": "init",
+            "method": "initialize",
+            "params": {
+                "packageEntry": sdk.to_string_lossy(),
+                "cwd": temp_dir.to_string_lossy()
+            }
+        });
+        stdin
+            .write_all(format!("{init}\n").as_bytes())
+            .await
+            .expect("send worker initialize");
+        stdin.flush().await.expect("flush worker initialize");
+
+        let init_response = tokio::time::timeout(std::time::Duration::from_secs(10), async {
+            loop {
+                let line = lines
+                    .next_line()
+                    .await
+                    .expect("read worker initialize line")
+                    .expect("worker exited before initialize response");
+                let Some(payload) = line.strip_prefix("AURA_IPC:") else {
+                    continue;
+                };
+                let message: Value = serde_json::from_str(payload).expect("parse worker response");
+                if message.get("type").and_then(Value::as_str) == Some("response")
+                    && message.get("id").and_then(Value::as_str) == Some("init")
+                {
+                    break message;
+                }
+            }
+        })
+        .await
+        .expect("worker initialize timed out");
+        assert_eq!(init_response.get("ok").and_then(Value::as_bool), Some(true));
+        let discovered = init_response
+            .pointer("/result/tools")
+            .and_then(Value::as_array)
+            .expect("worker initialize tools");
+        assert!(
+            discovered
+                .iter()
+                .any(|tool| tool.get("name").and_then(Value::as_str) == Some("deferred_tool")),
+            "Aura must bind extensions before snapshotting getAllTools()"
+        );
+
+        let shutdown = json!({
+            "type": "request",
+            "id": "shutdown",
+            "method": "shutdown",
+            "params": {}
+        });
+        stdin
+            .write_all(format!("{shutdown}\n").as_bytes())
+            .await
+            .expect("send worker shutdown");
+        stdin.flush().await.expect("flush worker shutdown");
+
+        let saw_shutdown_event = tokio::time::timeout(std::time::Duration::from_secs(10), async {
+            let mut saw_event = false;
+            while let Some(line) = lines.next_line().await.expect("read worker shutdown line") {
+                if line == "FIXTURE_SESSION_SHUTDOWN" {
+                    saw_event = true;
+                }
+            }
+            saw_event
+        })
+        .await
+        .expect("worker shutdown timed out");
+        assert!(
+            saw_shutdown_event,
+            "Aura must emit session_shutdown before disposing a bound Pi session"
+        );
+
+        let status = tokio::time::timeout(std::time::Duration::from_secs(5), child.wait())
+            .await
+            .expect("worker exit timed out")
+            .expect("wait for worker exit");
+        assert!(
+            status.success(),
+            "worker should exit cleanly after shutdown"
+        );
+        let _ = fs::remove_dir_all(temp_dir);
+    }
+
+    #[tokio::test]
+    #[ignore = "requires the user's local Pi installation and Aura Pi tool selection"]
+    async fn current_config_enforces_activation_allowlist_and_authority() {
+        let cfg = config::effective(&config::load(), None);
+        if cfg.get("piEnabled").and_then(Value::as_bool) != Some(true) {
+            return;
+        }
+        let bridge = PiBridge::initialize(&cfg)
+            .await
+            .expect("Pi bridge should initialize");
+
+        let inactive = bridge
+            .tools
+            .iter()
+            .find(|tool| bridge.allowed_tools.contains(&tool.name))
+            .map(|tool| tool.name.clone())
+            .expect("at least one Pi tool must be selected in Aura Settings");
+        let error = bridge
+            .execute(&inactive, json!({}))
+            .await
+            .expect_err("inactive Pi tools must not execute");
+        assert!(error.contains("not present in the active Pi tool set"));
+
+        let unknown = bridge
+            .enable_tools(&["__aura_unknown_tool__".to_string()])
+            .await
+            .expect("unknown activation should return a classified result");
+        assert_eq!(unknown.unknown, vec!["__aura_unknown_tool__"]);
+
+        if let Some(blocked_name) = bridge
+            .tools
+            .iter()
+            .find(|tool| !bridge.allowed_tools.contains(&tool.name))
+            .map(|tool| tool.name.clone())
+        {
+            let blocked = bridge
+                .enable_tools(&[blocked_name.clone()])
+                .await
+                .expect("blocked activation should return a classified result");
+            assert_eq!(blocked.blocked, vec![blocked_name]);
+        }
+
+        let traversal = bridge
+            .validate_authority("read", &json!({"path": "/private/etc/passwd"}))
+            .expect_err("file tools must not escape Aura Filesystem Root");
+        assert!(traversal.contains("outside the configured Filesystem Root"));
+
+        let allowlist_bridge = PiBridge {
+            shell_policy: "allowlist".into(),
+            shell_allowlist: Arc::new(HashSet::from(["echo".to_string()])),
+            ..bridge
+        };
+        let shell_error = allowlist_bridge
+            .validate_authority("bash", &json!({"command": "uname -a"}))
+            .expect_err("shell compatibility execution must preserve Aura Shell Policy");
+        assert!(shell_error.contains("not in Aura's shell allowlist"));
+        let chained = allowlist_bridge
+            .validate_authority("bash", &json!({"command": "echo ok; uname -a"}))
+            .expect_err("restricted shell policy must reject chained commands");
+        assert!(chained.contains("Shell chaining"));
+        allowlist_bridge.shutdown().await;
+    }
+
+    #[tokio::test]
     #[ignore = "requires the user's local Pi installation and Aura Pi tool selection"]
     async fn current_config_discovers_and_runs_selected_ls_tool() {
         let cfg = config::effective(&config::load(), None);
@@ -658,21 +979,43 @@ mod tests {
         let bridge = PiBridge::initialize(&cfg)
             .await
             .expect("Pi bridge should initialize");
-        let names = bridge
+        let initial = bridge
             .visible_tools()
+            .await
+            .expect("active Pi tools should be readable")
             .into_iter()
             .map(|tool| tool.name)
             .collect::<Vec<_>>();
-        println!("visible Pi tools: {names:?}");
+        println!("initial visible Pi tools: {initial:?}");
         assert!(
-            names.iter().any(|name| name == "ls"),
-            "current Aura Pi selection should include ls"
+            !initial.iter().any(|name| name == "ls"),
+            "allowed Pi tools should start inactive until requested"
         );
+
+        let activation = bridge
+            .enable_tools(&["ls".to_string()])
+            .await
+            .expect("selected Pi ls tool should activate");
+        assert!(
+            activation.enabled.iter().any(|name| name == "ls")
+                || activation.already_active.iter().any(|name| name == "ls"),
+            "ls should become active after capability activation"
+        );
+
+        let names = bridge
+            .visible_tools()
+            .await
+            .expect("active Pi tools should be readable after activation")
+            .into_iter()
+            .map(|tool| tool.name)
+            .collect::<Vec<_>>();
+        println!("visible Pi tools after activation: {names:?}");
+        assert!(names.iter().any(|name| name == "ls"));
 
         let result = bridge
             .execute("ls", json!({"path": "."}))
             .await
-            .expect("selected Pi ls tool should execute");
+            .expect("activated Pi ls tool should execute");
         println!("Pi ls result: {result}");
         assert!(result.get("content").and_then(Value::as_array).is_some());
         bridge.shutdown().await;
