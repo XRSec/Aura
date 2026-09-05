@@ -605,6 +605,7 @@ async function restartCurrentServices(mode = getCurrentMode()) {
         button.disabled = false;
         button.classList.remove('is-loading');
       }
+      updateServiceUI(currentServiceRunning);
     }
   } else {
     // If already running, show restarting UI
@@ -637,6 +638,7 @@ async function restartCurrentServices(mode = getCurrentMode()) {
         button.disabled = false;
         button.classList.remove('is-loading');
       }
+      updateServiceUI(currentServiceRunning);
     }
   }
 }
@@ -1609,6 +1611,10 @@ function updateServiceUI(isRunning) {
   const btn = document.getElementById('power-btn');
   if (!badge || !text || !btn) return;
 
+  // State events (including the stop phase of a restart) must not clear
+  // the pending operation's spinner or progress label.
+  if (btn.disabled && btn.classList.contains('is-loading')) return;
+
   if (isRunning) {
     badge.className = 'status-badge';
     text.textContent = t('Running');
@@ -1661,6 +1667,7 @@ document.getElementById('power-btn').addEventListener('click', async () => {
       button.disabled = false;
       button.classList.remove('is-loading');
     }
+    updateServiceUI(currentServiceRunning);
   }
 });
 
