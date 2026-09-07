@@ -1,7 +1,7 @@
 {
   "name": "aura",
   "productName": "Aura",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "description": "A lightweight, zero-config MCP connector powered by Tauri & Rust.",
   "author": "XRSec",
   "license": "MIT",
