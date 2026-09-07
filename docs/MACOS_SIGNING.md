@@ -37,7 +37,7 @@ From the Aura repository root:
 openssl base64 -A -in aura-code-signing.p12 | pbcopy
 # Paste into AURA_MACOS_CERT_P12
 
-cat aura-code-signing.password | pbcopy
+tr -d '\r\n' < aura-code-signing.password | pbcopy
 # Paste into AURA_MACOS_CERT_PASSWORD
 ```
 

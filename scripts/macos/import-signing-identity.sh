@@ -9,6 +9,10 @@ fi
 : "${AURA_MACOS_CERT_P12:?AURA_MACOS_CERT_P12 is required}"
 : "${AURA_MACOS_CERT_PASSWORD:?AURA_MACOS_CERT_PASSWORD is required}"
 
+# GitHub Secrets may preserve the newline copied from a password file.
+# Aura's generated password is a single-line Base64 string, so normalize CR/LF.
+CERT_PASSWORD="$(printf '%s' "$AURA_MACOS_CERT_PASSWORD" | tr -d '\r\n')"
+
 IDENTITY="${AURA_SIGNING_IDENTITY:-Aura Local Code Signing}"
 EXPECTED_CERT_SHA1="${AURA_SIGNING_CERT_SHA1:-caf294d421b7f39b39572ca12c8aba8f7289e926}"
 WORK_DIR="${RUNNER_TEMP:-${TMPDIR:-/tmp}}/aura-signing"
@@ -26,7 +30,10 @@ chmod 600 "$P12_PATH"
 security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
 security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
 security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-security import "$P12_PATH" -k "$KEYCHAIN_PATH" -P "$AURA_MACOS_CERT_PASSWORD" -T /usr/bin/codesign >/dev/null
+if ! security import "$P12_PATH" -k "$KEYCHAIN_PATH" -P "$CERT_PASSWORD" -T /usr/bin/codesign >/dev/null; then
+  echo "Failed to import Aura signing P12. Check that AURA_MACOS_CERT_P12 and AURA_MACOS_CERT_PASSWORD were generated as a matching pair." >&2
+  exit 1
+fi
 security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH" >/dev/null
 
 # Do not call `security add-trusted-cert` here. It can block indefinitely on
