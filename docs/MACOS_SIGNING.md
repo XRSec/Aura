@@ -28,11 +28,12 @@ The same password protects the inner PKCS#12 bundle and the outer encrypted repo
 On macOS runners:
 
 1. `scripts/macos/import-signing-identity.sh` decrypts the encrypted bundle into the runner temp directory.
-2. It imports the identity into a temporary keychain and trusts the self-signed root for that runner.
+2. It imports the identity into a temporary keychain and puts that keychain in the user search list.
 3. It checks that the imported certificate fingerprint matches the pinned Aura certificate.
-4. It exports `APPLE_SIGNING_IDENTITY=Aura Local Code Signing` for Tauri.
-5. Tauri signs the executable and the full `.app` bundle.
-6. `scripts/macos/verify-signature.sh` verifies the bundle ID, signing authority, certificate fingerprint, resource seal, and Designated Requirement.
+4. It intentionally does **not** call `security add-trusted-cert`; that command can block on headless GitHub-hosted macOS runners, and trust-store mutation is not required for `codesign` to use the imported identity.
+5. It exports `APPLE_SIGNING_IDENTITY=Aura Local Code Signing` for Tauri.
+6. Tauri signs the executable and the full `.app` bundle.
+7. `scripts/macos/verify-signature.sh` verifies the bundle ID, signing authority, certificate fingerprint, resource seal, and Designated Requirement.
 
 The workflow intentionally does not notarize the application. This signing identity is not an Apple Developer ID certificate and is not intended to satisfy public Gatekeeper distribution requirements.
 

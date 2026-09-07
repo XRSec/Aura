@@ -15,7 +15,6 @@ ENCRYPTED_P12_PATH="$SCRIPT_DIR/aura-code-signing.p12.enc"
 WORK_DIR="${RUNNER_TEMP:-${TMPDIR:-/tmp}}/aura-signing"
 KEYCHAIN_PATH="$WORK_DIR/aura-signing.keychain-db"
 P12_PATH="$WORK_DIR/aura-code-signing.p12"
-CERT_PATH="$WORK_DIR/aura-code-signing.pem"
 KEYCHAIN_PASSWORD="$(openssl rand -hex 24)"
 
 [[ -f "$ENCRYPTED_P12_PATH" ]] || {
@@ -25,7 +24,7 @@ KEYCHAIN_PASSWORD="$(openssl rand -hex 24)"
 
 mkdir -p "$WORK_DIR"
 chmod 700 "$WORK_DIR"
-rm -f "$KEYCHAIN_PATH" "$P12_PATH" "$CERT_PATH"
+rm -f "$KEYCHAIN_PATH" "$P12_PATH"
 
 openssl enc -d -aes-256-cbc -pbkdf2 -iter 250000 \
   -in "$ENCRYPTED_P12_PATH" \
@@ -37,9 +36,12 @@ security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
 security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
 security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
 security import "$P12_PATH" -k "$KEYCHAIN_PATH" -P "$AURA_MACOS_CERT_PASSWORD" -T /usr/bin/codesign >/dev/null
-security find-certificate -p -c "$IDENTITY" "$KEYCHAIN_PATH" > "$CERT_PATH"
-security add-trusted-cert -r trustRoot -k "$KEYCHAIN_PATH" "$CERT_PATH"
 security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH" >/dev/null
+
+# Do not call `security add-trusted-cert` here. It can block indefinitely on
+# GitHub-hosted macOS runners because they do not provide an interactive
+# SecurityAgent session. codesign can still use the imported self-signed
+# identity once this keychain is in the user search list.
 
 IMPORTED_CERT_SHA1="$(security find-certificate -c "$IDENTITY" -Z "$KEYCHAIN_PATH" | awk '/SHA-1 hash:/{print tolower($3); exit}')"
 EXPECTED_CERT_SHA1="$(printf '%s' "$EXPECTED_CERT_SHA1" | tr '[:upper:]' '[:lower:]')"
@@ -55,10 +57,10 @@ while IFS= read -r keychain; do
 done < <(security list-keychains -d user)
 security list-keychains -d user -s "$KEYCHAIN_PATH" "${existing_keychains[@]}"
 
-if ! security find-identity -v -p codesigning "$KEYCHAIN_PATH" | grep -Fq "\"$IDENTITY\""; then
-  echo "Signing identity '$IDENTITY' was imported but is not usable for code signing." >&2
-  exit 1
-fi
+# `security find-identity -p codesigning` reports self-signed identities as
+# untrusted even though codesign can use them, so fingerprint pinning plus the
+# actual post-build signature verification is the authoritative check.
+security find-certificate -c "$IDENTITY" "$KEYCHAIN_PATH" >/dev/null
 
 if [[ -n "${GITHUB_ENV:-}" ]]; then
   {
