@@ -19,3 +19,7 @@ yarn-error.log*
 # Local environment
 .env
 .env.local
+
+# Local macOS signing material
+aura-code-signing.p12
+aura-code-signing.password

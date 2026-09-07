@@ -13,21 +13,41 @@ This is for local/private distribution where the priority is keeping the same ma
 
 The expected Designated Requirement is anchored to both the Bundle ID and the fixed self-signed certificate root. The certificate fingerprint is pinned by the CI scripts so accidentally replacing the certificate causes the release build to fail instead of silently changing Aura's macOS identity.
 
-## Repository material
+## Local signing material
 
-`scripts/macos/aura-code-signing.p12.enc` contains the code-signing PKCS#12 bundle encrypted again with AES-256-CBC + PBKDF2 (250000 iterations). The decryption password is not stored in the repository.
+Keep the two local signing files directly in the Aura project root:
 
-GitHub Actions requires the repository secret:
+- `aura-code-signing.p12`
+- `aura-code-signing.password`
 
-- `AURA_MACOS_CERT_PASSWORD`
+Both filenames are ignored by Git and must never be committed. Keep both files mode `0600`.
 
-The same password protects the inner PKCS#12 bundle and the outer encrypted repository file.
+The PKCS#12 bundle must be generated in macOS-compatible legacy mode (`openssl pkcs12 -export -legacy ...`). OpenSSL 3's default PKCS#12 algorithms can fail with `security import` on macOS.
+
+## GitHub Actions secrets
+
+GitHub Actions uses two repository secrets derived from the local files:
+
+- `AURA_MACOS_CERT_P12`: Base64-encoded contents of `aura-code-signing.p12`.
+- `AURA_MACOS_CERT_PASSWORD`: Contents of `aura-code-signing.password`.
+
+From the Aura repository root:
+
+```bash
+openssl base64 -A -in aura-code-signing.p12 | pbcopy
+# Paste into AURA_MACOS_CERT_P12
+
+cat aura-code-signing.password | pbcopy
+# Paste into AURA_MACOS_CERT_PASSWORD
+```
+
+The certificate itself is intentionally self-signed and is only used to keep Aura's macOS code identity stable across releases.
 
 ## Release flow
 
 On macOS runners:
 
-1. `scripts/macos/import-signing-identity.sh` decrypts the encrypted bundle into the runner temp directory.
+1. `scripts/macos/import-signing-identity.sh` decodes `AURA_MACOS_CERT_P12` into the runner temp directory.
 2. It imports the identity into a temporary keychain and puts that keychain in the user search list.
 3. It checks that the imported certificate fingerprint matches the pinned Aura certificate.
 4. It intentionally does **not** call `security add-trusted-cert`; that command can block on headless GitHub-hosted macOS runners, and trust-store mutation is not required for `codesign` to use the imported identity.

@@ -175,6 +175,7 @@ jobs:
       - name: Import stable macOS signing identity
         if: runner.os == 'macOS'
         env:
+          AURA_MACOS_CERT_P12: ${{ secrets.AURA_MACOS_CERT_P12 }}
           AURA_MACOS_CERT_PASSWORD: ${{ secrets.AURA_MACOS_CERT_PASSWORD }}
           AURA_SIGNING_IDENTITY: Aura Local Code Signing
         run: bash scripts/macos/import-signing-identity.sh
