@@ -65,6 +65,13 @@ fn empty_schema() -> Value {
     json!({"type":"object","properties":{}})
 }
 
+fn is_ignorable_schema_format_warning(line: &str) -> bool {
+    let line = line.trim();
+    (line.starts_with("unknown format \"uint32\" ignored in schema at path \"")
+        || line.starts_with("unknown format \"uint64\" ignored in schema at path \""))
+        && line.ends_with('"')
+}
+
 struct WorkerInner {
     child: Mutex<Child>,
     stdin: Mutex<ChildStdin>,
@@ -422,7 +429,7 @@ impl PiBridge {
             tokio::spawn(async move {
                 let mut lines = BufReader::new(stderr).lines();
                 while let Ok(Some(line)) = lines.next_line().await {
-                    if !line.trim().is_empty() {
+                    if !line.trim().is_empty() && !is_ignorable_schema_format_warning(&line) {
                         eprintln!("Pi worker: {line}");
                     }
                 }
@@ -733,6 +740,22 @@ fn classify_tool(name: &str) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn ignores_only_unsigned_integer_schema_format_noise() {
+        assert!(is_ignorable_schema_format_warning(
+            "unknown format \"uint64\" ignored in schema at path \"#/anyOf/0/properties/elapsed_ms\""
+        ));
+        assert!(is_ignorable_schema_format_warning(
+            "unknown format \"uint32\" ignored in schema at path \"#/properties/count\""
+        ));
+        assert!(!is_ignorable_schema_format_warning(
+            "unknown format \"email\" ignored in schema at path \"#/properties/address\""
+        ));
+        assert!(!is_ignorable_schema_format_warning(
+            "extension failed to load"
+        ));
+    }
 
     #[tokio::test]
     async fn configured_pi_path_fails_closed_when_missing() {
