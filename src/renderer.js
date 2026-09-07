@@ -267,6 +267,25 @@ function t(text) {
 }
 
 const AURA_LATEST_RELEASE_API = 'https://api.github.com/repos/XRSec/Aura/releases/latest';
+const AURA_UPDATE_CHECK_STORAGE_KEY = 'aura:update-check:last-attempt';
+const AURA_UPDATE_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
+
+function shouldCheckForAppUpdate(now = Date.now()) {
+  try {
+    const lastAttempt = Number(window.localStorage.getItem(AURA_UPDATE_CHECK_STORAGE_KEY));
+    return !Number.isFinite(lastAttempt) || lastAttempt <= 0 || now - lastAttempt >= AURA_UPDATE_CHECK_INTERVAL_MS;
+  } catch (_) {
+    return true;
+  }
+}
+
+function rememberAppUpdateCheck(now = Date.now()) {
+  try {
+    window.localStorage.setItem(AURA_UPDATE_CHECK_STORAGE_KEY, String(now));
+  } catch (_) {
+    // Update checks must still work if WebView storage is unavailable.
+  }
+}
 
 function parseAppVersion(value) {
   const match = String(value || '').trim().match(/^v?(\d+)\.(\d+)\.(\d+)(?:[-+].*)?$/i);
@@ -308,12 +327,27 @@ function showUpdateNotice(currentVersion, release) {
 }
 
 async function checkForAppUpdate() {
+  if (!shouldCheckForAppUpdate()) return;
+  rememberAppUpdateCheck();
+
   try {
     const currentVersion = await window.api.getAppVersion();
     const response = await fetch(AURA_LATEST_RELEASE_API, {
       headers: { Accept: 'application/vnd.github+json' }
     });
     if (!response.ok) {
+      const rateLimitRemaining = response.headers.get('x-ratelimit-remaining');
+      if (response.status === 403 && rateLimitRemaining === '0') {
+        const resetSeconds = Number(response.headers.get('x-ratelimit-reset'));
+        const resetAt = Number.isFinite(resetSeconds) && resetSeconds > 0
+          ? new Date(resetSeconds * 1000).toISOString()
+          : 'the next GitHub rate-limit window';
+        await window.api.logRuntime(
+          'info',
+          `GitHub release check skipped: anonymous API rate limit exhausted; retry after ${resetAt}`
+        );
+        return;
+      }
       throw new Error(`GitHub Releases returned HTTP ${response.status}`);
     }
 

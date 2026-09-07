@@ -172,6 +172,13 @@ jobs:
       - name: Install Node dependencies
         run: npm ci || npm install
 
+      - name: Import stable macOS signing identity
+        if: runner.os == 'macOS'
+        env:
+          AURA_MACOS_CERT_PASSWORD: ${{ secrets.AURA_MACOS_CERT_PASSWORD }}
+          AURA_SIGNING_IDENTITY: Aura Local Code Signing
+        run: bash scripts/macos/import-signing-identity.sh
+
       - name: Build Tauri Application
         uses: tauri-apps/tauri-action@v0
         env:
@@ -183,3 +190,10 @@ jobs:
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}
+
+      - name: Verify stable macOS signing identity
+        if: runner.os == 'macOS'
+        env:
+          AURA_SIGNING_IDENTITY: Aura Local Code Signing
+          AURA_BUNDLE_ID: com.xrsec.aura
+        run: bash scripts/macos/verify-signature.sh "src-tauri/target/${{ matrix.target }}/release/bundle/macos/Aura.app"
