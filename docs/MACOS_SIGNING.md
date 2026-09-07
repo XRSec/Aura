@@ -13,14 +13,33 @@ This is for local/private distribution where the priority is keeping the same ma
 
 The expected Designated Requirement is anchored to both the Bundle ID and the fixed self-signed certificate root. The certificate fingerprint is pinned by the CI scripts so accidentally replacing the certificate causes the release build to fail instead of silently changing Aura's macOS identity.
 
-## GitHub Actions secrets
+## Local signing material
 
-The signing PKCS#12 bundle is not stored in the repository. GitHub Actions uses two repository secrets:
+Keep the two local signing files directly in the Aura project root:
 
-- `AURA_MACOS_CERT_P12`: Base64-encoded PKCS#12 bundle containing the fixed Aura signing certificate and private key.
-- `AURA_MACOS_CERT_PASSWORD`: Password protecting that PKCS#12 bundle.
+- `aura-code-signing.p12`
+- `aura-code-signing.password`
+
+Both filenames are ignored by Git and must never be committed. Keep both files mode `0600`.
 
 The PKCS#12 bundle must be generated in macOS-compatible legacy mode (`openssl pkcs12 -export -legacy ...`). OpenSSL 3's default PKCS#12 algorithms can fail with `security import` on macOS.
+
+## GitHub Actions secrets
+
+GitHub Actions uses two repository secrets derived from the local files:
+
+- `AURA_MACOS_CERT_P12`: Base64-encoded contents of `aura-code-signing.p12`.
+- `AURA_MACOS_CERT_PASSWORD`: Contents of `aura-code-signing.password`.
+
+From the Aura repository root:
+
+```bash
+openssl base64 -A -in aura-code-signing.p12 | pbcopy
+# Paste into AURA_MACOS_CERT_P12
+
+cat aura-code-signing.password | pbcopy
+# Paste into AURA_MACOS_CERT_PASSWORD
+```
 
 The certificate itself is intentionally self-signed and is only used to keep Aura's macOS code identity stable across releases.
 
